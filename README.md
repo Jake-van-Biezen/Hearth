@@ -37,4 +37,4 @@ Collections are provisioned on first boot from `deploy/pb_migrations/`
 
 ## Design language
 
-UI follows the frontend-design skill guidance (`.agents/skills/frontend-design/SKILL.md`).
+UI follows the frontend-design skill guidance (`.opencode/skills/frontend-design/SKILL.md`).

@@ -26,7 +26,7 @@ pnpm build       # production build (PWA service worker generated)
 
 ## Design
 
-Follow `.agents/skills/frontend-design/SKILL.md` — intentional, non-templated UI. Design tokens live in `src/routes/layout.css` (Inter Variable, shadcn theme vars).
+Follow `.opencode/skills/frontend-design/SKILL.md` (loaded as a project skill by opencode) — intentional, non-templated UI. Design tokens live in `src/routes/layout.css` (Inter Variable, shadcn theme vars).
 
 ## Conventions
 
