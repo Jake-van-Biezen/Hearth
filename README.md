@@ -40,6 +40,9 @@ Migrations in `deploy/pb_migrations/` run on restart. Google sign-in needs
 `https://hearth.tail88cd42.ts.net/api/oauth2-redirect` as an authorized
 redirect URI.
 
+Backups: PocketBase writes a consistent zip to `pb_data/backups` nightly at
+01:00 UTC (keeps 7). The NAS nightly appdata archive (03:30 local) includes it.
+
 ## Local PocketBase
 
 `deploy/docker-compose.yml` runs a dev PocketBase on port 8090 (`pnpm pb:up`).
