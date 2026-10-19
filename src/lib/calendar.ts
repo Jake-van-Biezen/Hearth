@@ -83,14 +83,15 @@ const timeFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-d
 export const formatTime = (d: Date) => timeFmt.format(d);
 
 const monthFmt = new Intl.DateTimeFormat('en-GB', { month: 'long' });
-const dayMonthFmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' });
+const dayShortMonthFmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
 
+/** "19 – 25 October", or "28 Sept – 4 Oct" across months (kept short for phones). */
 export function formatWeekRange(weekStart: Date): string {
 	const end = addDays(weekStart, 6);
 	if (weekStart.getMonth() === end.getMonth()) {
 		return `${weekStart.getDate()} – ${end.getDate()} ${monthFmt.format(end)}`;
 	}
-	return `${dayMonthFmt.format(weekStart)} – ${dayMonthFmt.format(end)}`;
+	return `${dayShortMonthFmt.format(weekStart)} – ${dayShortMonthFmt.format(end)}`;
 }
 
 /** Pick ink or paper text for a chip, whichever contrasts more with its fill. */

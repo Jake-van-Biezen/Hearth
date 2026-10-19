@@ -235,9 +235,8 @@
 				<h1 class="fam">{family?.name ?? 'Hearth'}</h1>
 				<div class="bar">
 					<p class="range">
-						{formatWeekRange(weekStart)}<span class="dot" aria-hidden="true">·</span>week {isoWeek(
-							weekStart
-						)}
+						<span class="dates">{formatWeekRange(weekStart)}</span>
+						<span class="wk">week {isoWeek(weekStart)}</span>
 					</p>
 					<nav class="weeknav" aria-label="Change week">
 						<button class="round" onclick={() => shiftWeek(-1)} aria-label="Previous week">
@@ -373,6 +372,9 @@
 		font-family: 'Karla Variable', 'Karla', sans-serif;
 		display: flex;
 		justify-content: center;
+		/* Safety net: nothing inside may widen the page. A wider page drags
+		   the fixed Add button and the event sheet off-screen on phones. */
+		overflow-x: clip;
 	}
 
 	.sheet {
@@ -424,12 +426,15 @@
 		margin-bottom: 14px;
 	}
 
+	/* Wraps the week buttons under the dates on very narrow screens instead
+	   of pushing them (and the page) past the right edge. */
 	.bar {
 		margin-top: 6px;
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
+		gap: 8px 12px;
 	}
 
 	.fam {
@@ -449,14 +454,23 @@
 	}
 
 	.range {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		min-width: 0;
 		font-size: 14px;
-		white-space: nowrap;
+		line-height: 1.3;
 		color: #4c5260;
 		font-variant-numeric: tabular-nums;
 	}
 
-	.dot {
-		margin: 0 6px;
+	.range > span {
+		white-space: nowrap;
+	}
+
+	.wk {
+		font-size: 13px;
+		color: #666b76;
 	}
 
 	.weeknav {
@@ -464,6 +478,7 @@
 		align-items: center;
 		gap: 6px;
 		flex-shrink: 0;
+		margin-left: auto;
 	}
 
 	button {
