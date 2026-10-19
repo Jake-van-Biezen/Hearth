@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hearth — Wall Planner sketch</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Karla:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#51493a; font-family:'Karla',sans-serif; color:#22252a; }
+  .frame {
+    width:390px; height:844px; margin:0 auto; position:relative; overflow:hidden;
+    background-color:#fdfcf8;
+    background-image:
+      linear-gradient(rgba(120,150,190,.14) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(120,150,190,.14) 1px, transparent 1px);
+    background-size:26px 26px;
+  }
+  .marginline { position:absolute; top:0; bottom:0; left:34px; width:3px; background:rgba(208,80,64,.55); }
+  .brand {
+    position:absolute; top:150px; left:56px;
+    font-family:'Permanent Marker',cursive; font-size:64px; color:#c0392b;
+    transform:rotate(-2deg);
+  }
+  .tagline { position:absolute; top:242px; left:58px; font-size:16.5px; color:#4c5260; }
+  .week {
+    position:absolute; top:320px; left:56px; right:28px;
+    border:2px solid #22252a; border-radius:4px; height:150px;
+    display:grid; grid-template-columns:repeat(7,1fr);
+  }
+  .day { border-right:1px solid rgba(34,37,42,.35); position:relative; }
+  .day:last-child { border-right:none; background:rgba(208,80,64,.08); }
+  .day .lbl {
+    position:absolute; top:10px; width:100%; text-align:center;
+    font-family:'Permanent Marker',cursive; font-size:13px; color:#22252a;
+  }
+  .day .chip {
+    position:absolute; left:20%; right:14%; height:30px; border-radius:3px;
+  }
+  .day:nth-child(2) .chip { top:64px; background:#3b78c4; }
+  .day:nth-child(4) .chip { top:88px; background:#3b9e6b; }
+  .day:nth-child(6) .chip { top:64px; bottom:12px; background:#e8c33d; }
+  .cta {
+    position:absolute; top:542px; left:50%; transform:translateX(-50%);
+    width:300px; padding:15px 0; border-radius:999px;
+    background:#ffffff; border:1px solid #c9ccd2;
+    font-size:15px; font-weight:600;
+    display:flex; align-items:center; justify-content:center; gap:12px;
+  }
+  .cta svg { width:20px; height:20px; }
+  .note { position:absolute; top:632px; width:100%; text-align:center; font-size:13px; color:#7b7f88; }
+  .home { position:absolute; bottom:44px; width:100%; text-align:center; font-size:13.5px; color:#7b7f88; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="marginline"></div>
+
+  <h1 class="brand">Hearth</h1>
+  <p class="tagline">The family's day, on one wall.</p>
+
+  <div class="week">
+    <div class="day"><span class="lbl">Mon</span></div>
+    <div class="day"><span class="lbl">Tue</span><div class="chip"></div></div>
+    <div class="day"><span class="lbl">Wed</span></div>
+    <div class="day"><span class="lbl">Thu</span><div class="chip"></div></div>
+    <div class="day"><span class="lbl">Fri</span></div>
+    <div class="day"><span class="lbl">Sat</span><div class="chip"></div></div>
+    <div class="day"><span class="lbl">Sun</span></div>
+  </div>
+
+  <div class="cta">
+    <svg viewBox="0 0 48 48">
+      <path fill="#EA4335" d="M24 9.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 3.18 29.93 1 24 1 14.4 1 6.04 6.93 2.42 15.12l9.27 5.7C13.42 15.62 18.15 9.75 24 9.75z"/>
+      <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/>
+      <path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H2.42C.88 17.09 0 20.45 0 24s.88 6.91 2.42 9.88l9.27-5.7z"/>
+      <path fill="#34A853" d="M24 47c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H2.42v5.7C6.04 41.07 14.4 47 24 47z"/>
+    </svg>
+    Continue with Google
+  </div>
+
+  <p class="note">Self-hosted at home. Private to your family.</p>
+  <p class="home">Hang it on the wall, carry it in your pocket.</p>
+</div>
+</body>
+</html>

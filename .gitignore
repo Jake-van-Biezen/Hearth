@@ -50,6 +50,7 @@ vite.config.ts.timestamp-*
 
 # PocketBase
 /deploy/pb_data
+/deploy/pb_data_local
 
 # PWA dev
 dev-dist

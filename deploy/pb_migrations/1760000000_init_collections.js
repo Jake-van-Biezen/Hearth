@@ -15,8 +15,8 @@ migrate(
 					cascadeDelete: false
 				}
 			],
-			listRule: 'id != ""',
-			viewRule: 'id != ""',
+			listRule: '@request.auth.id != "" && id != ""',
+			viewRule: '@request.auth.id != "" && id != ""',
 			createRule: null,
 			updateRule: 'members.id ?= @request.auth.id',
 			deleteRule: null
@@ -46,11 +46,11 @@ migrate(
 					required: true
 				}
 			],
-			listRule: 'family.members.id ?= @request.auth.id',
-			viewRule: 'family.members.id ?= @request.auth.id',
-			createRule: 'family.members.id ?= @request.auth.id',
-			updateRule: 'family.members.id ?= @request.auth.id',
-			deleteRule: 'family.members.id ?= @request.auth.id'
+			listRule: '@request.auth.id != "" && family.members.id ?= @request.auth.id',
+			viewRule: '@request.auth.id != "" && family.members.id ?= @request.auth.id',
+			createRule: '@request.auth.id != "" && family.members.id ?= @request.auth.id',
+			updateRule: '@request.auth.id != "" && family.members.id ?= @request.auth.id',
+			deleteRule: '@request.auth.id != "" && family.members.id ?= @request.auth.id'
 		});
 		app.save(calendars);
 
@@ -82,11 +82,11 @@ migrate(
 					cascadeDelete: false
 				}
 			],
-			listRule: 'calendar.family.members.id ?= @request.auth.id',
-			viewRule: 'calendar.family.members.id ?= @request.auth.id',
-			createRule: 'calendar.family.members.id ?= @request.auth.id',
-			updateRule: 'calendar.family.members.id ?= @request.auth.id',
-			deleteRule: 'calendar.family.members.id ?= @request.auth.id'
+			listRule: '@request.auth.id != "" && calendar.family.members.id ?= @request.auth.id',
+			viewRule: '@request.auth.id != "" && calendar.family.members.id ?= @request.auth.id',
+			createRule: '@request.auth.id != "" && calendar.family.members.id ?= @request.auth.id',
+			updateRule: '@request.auth.id != "" && calendar.family.members.id ?= @request.auth.id',
+			deleteRule: '@request.auth.id != "" && calendar.family.members.id ?= @request.auth.id'
 		});
 		app.save(events);
 	},

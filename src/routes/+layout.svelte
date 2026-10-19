@@ -8,6 +8,6 @@
 <svelte:head>
 	<link rel="icon" href={favicon} />
 	<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-	<meta name="theme-color" content="#1c1917" />
+	<meta name="theme-color" content="#fbfaf4" />
 </svelte:head>
 {@render children()}

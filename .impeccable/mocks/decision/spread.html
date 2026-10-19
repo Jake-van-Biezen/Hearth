@@ -1,0 +1,65 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Karla:wght@400;600;700&family=Permanent+Marker&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:390px;height:844px;overflow:hidden;font-family:Karla,sans-serif;color:#22252a;background:#fbfaf4;
+background-image:linear-gradient(rgba(122,150,190,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(122,150,190,.16) 1px,transparent 1px);background-size:26px 26px;position:relative}
+.margin{position:absolute;top:0;bottom:0;left:20px;width:3px;background:rgba(208,80,64,.5)}
+header{display:flex;align-items:center;justify-content:space-between;padding:52px 16px 12px 36px}
+.fam{font-family:'Permanent Marker';font-size:28px;color:#c0392b;transform:rotate(-2deg)}
+.range{font-size:13px;color:#4c5260;margin-top:2px}
+.nav{display:flex;gap:6px}
+.nav button{width:40px;height:40px;border-radius:999px;border:1px solid #c9ccd2;background:#fff;font:600 16px Karla;color:#22252a}
+.nav .t{width:auto;padding:0 14px;font-size:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:6px 14px 0 36px}
+.box{border:1px solid rgba(34,37,42,.35);border-radius:4px;background:rgba(251,250,244,.85);height:150px;padding:8px;display:flex;flex-direction:column;gap:5px}
+.box.today{border:2px solid #22252a}
+.box.we{background:rgba(208,80,64,.07)}
+.d{display:flex;align-items:baseline;justify-content:space-between}
+.d b{font-family:'Permanent Marker';font-weight:400;font-size:14px}
+.d span{font-size:12px;color:#666b76}
+.today .d span{color:#22252a;font-weight:700}
+.chip{border-radius:3px;padding:4px 6px;font-size:12px;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip i{font-style:normal;font-weight:400;opacity:.9;margin-right:4px}
+.b{background:#3b78c4;color:#f2f6fb}.g{background:#3b9e6b;color:#f0f7f2}.y{background:#d9b12e;color:#3a2f10}
+.ad{border:1.5px dashed currentColor;background:none}
+.ad.g{color:#2d7a52}.ad.b{color:#2d5f9e}
+.next{border:2px solid #22252a;background:#fff}
+.next .k{font-size:12px;font-weight:700;color:#4c5260}
+.next .tm{font-size:34px;font-weight:700;line-height:1;margin-top:6px;letter-spacing:-.01em}
+.next .ti{font-size:15px;font-weight:600;margin-top:6px}
+.next .c{display:flex;align-items:center;gap:6px;font-size:12px;color:#4c5260;margin-top:auto}
+.next .c::before{content:"";width:10px;height:10px;border-radius:2px;background:#3b78c4}
+.add{position:absolute;right:18px;bottom:30px;height:54px;padding:0 22px;border-radius:999px;background:#22252a;color:#fbfaf4;font:600 16px Karla;border:none;box-shadow:0 6px 18px -6px rgba(34,37,42,.5)}
+.legend{position:absolute;left:36px;bottom:44px;display:flex;gap:12px;font-size:12px;color:#4c5260}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend span::before{content:"";width:10px;height:10px;border-radius:2px;background:var(--c)}
+</style></head><body>
+<span class="margin"></span>
+<header>
+  <div><div class="fam">The Biezens</div><div class="range">19 – 25 October · week 43</div></div>
+  <div class="nav"><button>‹</button><button class="t">Today</button><button>›</button></div>
+</header>
+<main class="grid">
+  <div class="box today"><div class="d"><b>Mon</b><span>19 · today</span></div>
+    <div class="chip g"><i>08:15</i>School photo</div>
+    <div class="chip b"><i>18:30</i>Swim · Noor</div></div>
+  <div class="box"><div class="d"><b>Tue</b><span>20</span></div>
+    <div class="chip b"><i>16:00</i>Dentist · Sam</div></div>
+  <div class="box"><div class="d"><b>Wed</b><span>21</span></div>
+    <div class="chip g ad">Study day, no school</div></div>
+  <div class="box"><div class="d"><b>Thu</b><span>22</span></div>
+    <div class="chip b"><i>18:30</i>Swim · Noor</div>
+    <div class="chip g"><i>19:00</i>Parents' evening</div></div>
+  <div class="box"><div class="d"><b>Fri</b><span>23</span></div></div>
+  <div class="box we"><div class="d"><b>Sat</b><span>24</span></div>
+    <div class="chip b"><i>11:00</i>Football · Sam</div>
+    <div class="chip y"><i>15:00</i>Oma's birthday</div></div>
+  <div class="box we"><div class="d"><b>Sun</b><span>25</span></div>
+    <div class="chip b ad">Clocks go back</div></div>
+  <div class="box next"><div class="k">Next up</div><div class="tm">18:30</div><div class="ti">Swim · Noor</div><div class="c">Family</div></div>
+</main>
+<div class="legend"><span style="--c:#3b78c4">Family</span><span style="--c:#3b9e6b">School</span><span style="--c:#d9b12e">Visits</span></div>
+<button class="add">+ Add</button>
+</body></html>

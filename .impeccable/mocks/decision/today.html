@@ -1,0 +1,61 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Karla:wght@400;600;700&family=Permanent+Marker&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:390px;height:844px;overflow:hidden;font-family:Karla,sans-serif;color:#22252a;background:#fbfaf4;
+background-image:linear-gradient(rgba(122,150,190,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(122,150,190,.16) 1px,transparent 1px);background-size:26px 26px;position:relative}
+.margin{position:absolute;top:0;bottom:0;left:34px;width:3px;background:rgba(208,80,64,.5)}
+header{display:flex;justify-content:space-between;align-items:center;padding:52px 18px 0 56px;font-size:13px;color:#4c5260}
+header b{color:#22252a;font-weight:700}
+.av{width:36px;height:36px;border-radius:999px;border:1px solid #c9ccd2;background:#fff;display:grid;place-items:center;font-weight:700;font-size:13px}
+.day{padding:22px 18px 0 56px}
+.day h1{font-family:'Permanent Marker';font-weight:400;font-size:52px;line-height:1;color:#c0392b;transform:rotate(-2deg);transform-origin:left bottom}
+.day p{font-size:15px;color:#4c5260;margin-top:8px}
+.list{margin:20px 18px 0 56px;display:flex;flex-direction:column}
+.ev{display:grid;grid-template-columns:56px 1fr;gap:12px;align-items:start;padding:12px 0;border-top:1px solid rgba(34,37,42,.18)}
+.ev:last-child{border-bottom:1px solid rgba(34,37,42,.18)}
+.ev .t{font-size:16px;font-weight:700;padding-top:2px}
+.ev .t small{display:block;font-size:12px;font-weight:400;color:#666b76}
+.card{border-left:5px solid var(--c);padding-left:10px}
+.card b{font-size:17px;font-weight:600;display:block}
+.card span{font-size:13px;color:#4c5260}
+.ev.past{opacity:.55}
+.now{position:relative;height:0;border-top:2px solid #c0392b;margin:0 0 0 -8px}
+.now::before{content:"";position:absolute;left:-5px;top:-6px;width:10px;height:10px;border-radius:50%;background:#c0392b}
+.wk{position:absolute;left:56px;right:18px;bottom:110px}
+.wk .h{display:flex;justify-content:space-between;font-size:13px;color:#4c5260;margin-bottom:8px}
+.wk .h b{color:#22252a}
+.strip{display:grid;grid-template-columns:repeat(7,1fr);border:2px solid #22252a;border-radius:4px;height:96px;background:rgba(251,250,244,.9)}
+.c{position:relative;border-right:1px solid rgba(34,37,42,.35);display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:7px}
+.c:last-child{border-right:none}
+.c.we{background:rgba(208,80,64,.07)}
+.c.sel{background:#22252a;color:#fbfaf4}
+.c b{font-family:'Permanent Marker';font-weight:400;font-size:12px}
+.c span{font-size:12px}
+.dots{display:flex;flex-direction:column;gap:3px;width:70%;margin-top:3px}
+.dots i{height:7px;border-radius:2px;background:var(--c)}
+.add{position:absolute;left:56px;right:18px;bottom:34px;height:54px;border-radius:999px;background:#22252a;color:#fbfaf4;font:600 16px Karla;border:none}
+</style></head><body>
+<span class="margin"></span>
+<header><span><b>The Biezens</b> · week 43</span><span class="av">J</span></header>
+<section class="day"><h1>Mon 19</h1><p>Two things today · next at 18:30</p></section>
+<section class="list">
+  <div class="ev past"><div class="t">08:15<small>09:00</small></div><div class="card" style="--c:#3b9e6b"><b>School photo</b><span>School · bring the blue shirt</span></div></div>
+  <div class="now"></div>
+  <div class="ev"><div class="t">18:30<small>19:30</small></div><div class="card" style="--c:#3b78c4"><b>Swim · Noor</b><span>Family · De Waterlelie</span></div></div>
+</section>
+<section class="wk">
+  <div class="h"><b>This week</b><span>19 – 25 Oct</span></div>
+  <div class="strip">
+    <div class="c sel"><b>Mon</b><span>19</span><div class="dots"><i style="--c:#3b9e6b"></i><i style="--c:#3b78c4"></i></div></div>
+    <div class="c"><b>Tue</b><span>20</span><div class="dots"><i style="--c:#3b78c4"></i></div></div>
+    <div class="c"><b>Wed</b><span>21</span><div class="dots"><i style="--c:#3b9e6b"></i></div></div>
+    <div class="c"><b>Thu</b><span>22</span><div class="dots"><i style="--c:#3b78c4"></i><i style="--c:#3b9e6b"></i></div></div>
+    <div class="c"><b>Fri</b><span>23</span></div>
+    <div class="c we"><b>Sat</b><span>24</span><div class="dots"><i style="--c:#3b78c4"></i><i style="--c:#d9b12e"></i></div></div>
+    <div class="c we"><b>Sun</b><span>25</span><div class="dots"><i style="--c:#3b78c4"></i></div></div>
+  </div>
+</section>
+<button class="add">+ Add to Monday</button>
+</body></html>
