@@ -37,4 +37,4 @@ Collections are provisioned on first boot from `deploy/pb_migrations/`
 
 ## Design language
 
-UI follows the frontend-design skill guidance (`.opencode/skills/frontend-design/SKILL.md`).
+Design work uses the [Impeccable](https://github.com/pbakaus/impeccable) skill (`.opencode/skills/impeccable/`) — run `/impeccable`.

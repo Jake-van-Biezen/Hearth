@@ -26,7 +26,7 @@ pnpm build       # production build (PWA service worker generated)
 
 ## Design
 
-Follow `.opencode/skills/frontend-design/SKILL.md` (loaded as a project skill by opencode) — intentional, non-templated UI. Design tokens live in `src/routes/layout.css` (Inter Variable, shadcn theme vars).
+Follow the `impeccable` project skill (`.opencode/skills/impeccable/`) for design work — run `/impeccable` commands (`audit`, `critique`, `polish`, `harden`, ...) and keep `.impeccable/design.json` + `PRODUCT.md` as the design source of truth. Design tokens live in `src/routes/layout.css` (Inter Variable, shadcn theme vars).
 
 ## Conventions
 
