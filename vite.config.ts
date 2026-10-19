@@ -1,6 +1,6 @@
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 import tailwindcss from '@tailwindcss/vite';
-import adapter from '@sveltejs/adapter-node';
+import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
@@ -13,19 +13,19 @@ export default defineConfig({
 				runes: ({ filename }) => filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 
-			// adapter-auto only supports some environments, see https://svelte.dev/docs/kit/adapter-auto for a list.
-			// If your environment is not supported, or if you settled on a specific environment, switch out the adapter.
-			// See https://svelte.dev/docs/kit/adapters for more information about adapters.
-			adapter: adapter()
+			// SPA build served by PocketBase from pb_public (same origin as the API).
+			// PocketBase falls back to index.html for unknown paths.
+			adapter: adapter({ fallback: 'index.html' })
 		}),
 		SvelteKitPWA({
 			registerType: 'autoUpdate',
+			kit: { adapterFallback: 'index.html', spa: true },
 			manifest: {
 				name: 'Hearth',
 				short_name: 'Hearth',
 				description: 'A shared family calendar',
-				theme_color: '#1c1917',
-				background_color: '#1c1917',
+				theme_color: '#fbfaf4',
+				background_color: '#fbfaf4',
 				display: 'standalone',
 				start_url: '/',
 				lang: 'en',
@@ -37,6 +37,8 @@ export default defineConfig({
 			},
 			workbox: {
 				globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+				// PocketBase owns these: API (incl. the OAuth2 redirect popup) and admin UI.
+				navigateFallbackDenylist: [/^\/api\//, /^\/_\//],
 				runtimeCaching: [
 					{
 						urlPattern: ({ url }) => url.pathname.startsWith('/_pb') || url.pathname.startsWith('/api/files/'),

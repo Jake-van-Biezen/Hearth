@@ -20,9 +20,12 @@ pnpm build       # production build (PWA service worker generated)
 
 ## Backend (NAS)
 
-- `deploy/docker-compose.yml` — PocketBase container, port 8090
+- Prod: https://hearth.tail88cd42.ts.net — PocketBase container `hearth` on the NAS serves API + admin + the SPA build (`pb_public`)
+- Deploy: `deploy/deploy-nas.sh` (build with blank `PUBLIC_POCKETBASE_URL` → same-origin, upload, restart)
+- `adapter-static` SPA (`fallback: index.html`, `ssr = false`); service worker must not handle `/api/` or `/_/`
+- `deploy/docker-compose.yml` — local dev PocketBase, port 8090
 - `deploy/pb_migrations/` — collections provisioned on boot: `families`, `calendars`, `events`
-- Frontend points at `POCKETBASE_URL` (copy `.env.example` → `.env`)
+- Dev frontend points at `PUBLIC_POCKETBASE_URL` (copy `.env.example` → `.env`)
 
 ## Design
 

@@ -21,19 +21,29 @@ pnpm dev                      # http://localhost:5173
 
 Run type checks with `pnpm check`.
 
-## PocketBase (NAS)
+## Production (NAS)
 
-PocketBase serves the API + admin UI at `POCKETBASE_URL` (e.g. `http://192.168.1.69:8090/_/`).
+Live at **https://hearth.tail88cd42.ts.net** (Tailscale Service `svc:hearth`).
 
-Bring it up with Docker Compose:
+A single PocketBase container (`hearth`, stack `/volume1/docker/stacks/hearth/`)
+serves the API, the admin UI (`/_/`) and the built app (SPA via
+`adapter-static`, from `pb_public`). Same origin, so the frontend needs no
+PocketBase URL in production.
+
+Deploy (build, upload `pb_public` + `pb_migrations`, restart):
 
 ```sh
-docker compose -f deploy/docker-compose.yml up -d
+deploy/deploy-nas.sh
 ```
 
-Collections are provisioned on first boot from `deploy/pb_migrations/`
-(families, calendars, events, members). Create the first admin account at
-`http://<nas>:8090/_/`.
+Migrations in `deploy/pb_migrations/` run on restart. Google sign-in needs
+`https://hearth.tail88cd42.ts.net/api/oauth2-redirect` as an authorized
+redirect URI.
+
+## Local PocketBase
+
+`deploy/docker-compose.yml` runs a dev PocketBase on port 8090 (`pnpm pb:up`).
+Collections are provisioned on first boot from `deploy/pb_migrations/`.
 
 ## Design language
 
