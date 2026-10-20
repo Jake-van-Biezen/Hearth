@@ -2,6 +2,7 @@
 	import { Car, Lock, X } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { pb } from '$lib/pocketbase';
+	import { REMINDER_OPTIONS, canRemind, loadReminder, setReminder, type Reminder } from '$lib/reminders';
 	import {
 		deleteEvent,
 		exceptOccurrence,
@@ -61,6 +62,9 @@
 	/** Editing one occurrence of a series: "all" touches every repeat, "one" splits the day off. */
 	let scope = $state<'one' | 'all'>('all');
 	let usesCar = $state(false);
+	/** Lead time in minutes (null = no reminder) and the saved row, for this person only. */
+	let reminder = $state<number | null>(null);
+	let savedReminder = $state<Reminder | null>(null);
 	let busy = $state(false);
 	let confirmDelete = $state(false);
 	let error = $state('');
@@ -108,6 +112,8 @@
 		allDay = false;
 		repeat = '';
 		usesCar = false;
+		reminder = null;
+		savedReminder = null;
 		startTime = nextHour();
 		endTime = '';
 		const last = localStorage.getItem(LAST_CAL_KEY);
@@ -127,6 +133,18 @@
 		repeat = ev.recurrence ?? '';
 		scope = 'all';
 		usesCar = ev.usesCar ?? false;
+		reminder = null;
+		savedReminder = null;
+		const uid = pb.authStore.record?.id;
+		if (uid) {
+			loadReminder(uid, ev.id)
+				.then((r) => {
+					if (editing?.id !== ev.id) return;
+					savedReminder = r;
+					reminder = r?.minutesBefore ?? null;
+				})
+				.catch(() => {});
+		}
 		startTime = ev.allDay ? nextHour() : formatTime(start);
 		endTime = end && !ev.allDay ? formatTime(end) : '';
 		spanDays = end ? Math.max(0, daysBetween(startOfDay(start), startOfDay(end))) : 0;
@@ -186,6 +204,38 @@
 			confirmDelete = false;
 		} finally {
 			busy = false;
+		}
+	}
+
+	/**
+	 * Store this person's reminder once the event itself is on the server. New
+	 * events have no id client-side, so look up the one we just created.
+	 */
+	async function syncReminder(result: SaveResult, data: { title: string; startsAt: string; calendar: string; allDay: boolean; recurrence: string }) {
+		const uid = pb.authStore.record?.id;
+		if (!uid || result !== 'sent' || !canRemind(data)) return;
+		if (reminder === (savedReminder?.minutesBefore ?? null)) return;
+		try {
+			let eventId: string | null = editing && !(editing.recurrence && scope === 'one') ? editing.id : null;
+			if (!editing) {
+				const found = await pb.collection('events').getList<CalendarEvent>(1, 1, {
+					filter: pb.filter('createdBy = {:uid} && title = {:t} && startsAt = {:s} && calendar = {:c}', {
+						uid,
+						t: data.title,
+						s: data.startsAt,
+						c: data.calendar
+					}),
+					sort: '-created'
+				});
+				eventId = found.items[0]?.id ?? null;
+			}
+			if (!eventId) {
+				if (reminder !== null) toast.error("Couldn't set the reminder; set it again from the event.");
+				return;
+			}
+			await setReminder(uid, eventId, reminder, savedReminder);
+		} catch {
+			toast.error("Saved the event, but the reminder didn't stick. Try again when you're online.");
 		}
 	}
 
@@ -285,6 +335,7 @@
 				localStorage.setItem(LAST_CAL_KEY, calendarId);
 			}
 			announce(result, `"${name}" saved.`);
+			await syncReminder(result, data);
 			close();
 			onsaved();
 		} catch (err) {
@@ -362,6 +413,17 @@
 			<input bind:checked={usesCar} type="checkbox" role="switch" />
 			<span class="car"><Car size={18} strokeWidth={2} aria-hidden="true" />Needs the car</span>
 		</label>
+
+		{#if canRemind({ recurrence: repeat, allDay })}
+			<label class="field">
+				<span>Remind me</span>
+				<select bind:value={reminder}>
+					{#each REMINDER_OPTIONS as opt (opt.label)}
+						<option value={opt.value}>{opt.label}</option>
+					{/each}
+				</select>
+			</label>
+		{/if}
 
 		{#if editing?.recurrence}
 			<fieldset class="cals">
@@ -575,6 +637,18 @@
 		width: 100%;
 		min-width: 0;
 		caret-color: var(--red-display);
+	}
+
+	select {
+		height: 48px;
+		padding: 0 14px;
+		border: 1px solid var(--ctrl-mute);
+		border-radius: 4px;
+		background: var(--sheet);
+		font: inherit;
+		font-size: 17px;
+		color: var(--ink);
+		width: 100%;
 	}
 
 	input::placeholder {

@@ -89,41 +89,118 @@ function payloadFor(n) {
 
 const inFlight = new Set();
 
+/** Push `payload` to every device `uid` subscribed. Returns [sent, total]. */
+async function sendToUser(uid, payload) {
+	const subs = await pb.collection('push_subscriptions').getFullList({
+		filter: pb.filter('user = {:uid}', { uid })
+	});
+	let sent = 0;
+	await Promise.all(
+		subs.map(async (s) => {
+			try {
+				await webpush.sendNotification(
+					{ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+					payload,
+					{ TTL: 24 * 60 * 60, urgency: 'normal' }
+				);
+				sent++;
+			} catch (err) {
+				if (err.statusCode === 404 || err.statusCode === 410) {
+					log(`push: subscription ${s.id} gone, removing`);
+					await pb.collection('push_subscriptions').delete(s.id).catch(() => {});
+				} else {
+					log(`push: send to ${s.id} failed`, err.statusCode ?? '', err.body ?? err.message);
+				}
+			}
+		})
+	);
+	return [sent, subs.length];
+}
+
 async function deliver(n) {
 	if (n.pushedAt || inFlight.has(n.id)) return;
 	if (Date.now() - parse(n.created).getTime() > MAX_AGE_MS) return;
 	inFlight.add(n.id);
 	try {
-		const subs = await pb.collection('push_subscriptions').getFullList({
-			filter: pb.filter('user = {:uid}', { uid: n.recipient })
-		});
-		const payload = payloadFor(n);
-		let sent = 0;
-		await Promise.all(
-			subs.map(async (s) => {
-				try {
-					await webpush.sendNotification(
-						{ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-						payload,
-						{ TTL: 24 * 60 * 60, urgency: 'normal' }
-					);
-					sent++;
-				} catch (err) {
-					if (err.statusCode === 404 || err.statusCode === 410) {
-						log(`push: subscription ${s.id} gone, removing`);
-						await pb.collection('push_subscriptions').delete(s.id).catch(() => {});
-					} else {
-						log(`push: send to ${s.id} failed`, err.statusCode ?? '', err.body ?? err.message);
-					}
-				}
-			})
-		);
+		const [sent, total] = await sendToUser(n.recipient, payloadFor(n));
 		await pb.collection('notifications').update(n.id, { pushedAt: new Date().toISOString() });
-		log(`push: ${n.id} (${n.action}) -> ${sent}/${subs.length} device(s)`);
+		log(`push: ${n.id} (${n.action}) -> ${sent}/${total} device(s)`);
 	} catch (err) {
 		log(`push: ${n.id} failed, will retry on next sweep`, err.message);
 	} finally {
 		inFlight.delete(n.id);
+	}
+}
+
+// ------------------------------------------------------------- reminders --
+
+const remindersBusy = { current: false };
+
+/** Human lead time: "at start", "15 min", "1 h", "1 day". */
+function leadText(min) {
+	if (min === 0) return '';
+	if (min < 60) return `in ${min} min`;
+	if (min % 1440 === 0) return `in ${min / 1440} day${min === 1440 ? '' : 's'}`;
+	if (min % 60 === 0) return `in ${min / 60} h`;
+	return `in ${Math.floor(min / 60)} h ${min % 60} min`;
+}
+
+function reminderPayload(ev, minutes) {
+	const start = parse(ev.startsAt);
+	const when = timeFmt.format(start);
+	const params = new URLSearchParams({ day: isoDayFmt.format(start), event: ev.id });
+	return JSON.stringify({
+		title: ev.title,
+		body: minutes === 0 ? `Starts at ${when}` : `Starts ${leadText(minutes)}, at ${when}`,
+		tag: `reminder-${ev.id}`,
+		url: `/calendar?${params}`
+	});
+}
+
+/**
+ * Fire every reminder whose lead time has arrived. Reminders are re-derived
+ * from the event's current start each sweep, so moving an event re-targets
+ * them. `firedFor` = "<startsAt>|<minutes>" stops repeat sends.
+ */
+async function sweepReminders() {
+	if (remindersBusy.current) return;
+	remindersBusy.current = true;
+	try {
+		const rows = await pb.collection('reminders').getFullList();
+		const now = Date.now();
+		for (const r of rows) {
+			let ev;
+			try {
+				ev = await pb.collection('events').getOne(r.event);
+			} catch (err) {
+				if (err.status === 404) {
+					// Event deleted: drop the orphaned reminder.
+					await pb.collection('reminders').delete(r.id).catch(() => {});
+				}
+				continue;
+			}
+			// Recurring series have no single start to remind against (v1).
+			if (ev.recurrence || ev.allDay) continue;
+			const start = parse(ev.startsAt)?.getTime();
+			if (!start) continue;
+
+			const minutes = r.minutesBefore;
+			const key = `${ev.startsAt}|${minutes}`;
+			if (r.firedFor === key) continue;
+			const fireAt = start - minutes * 60_000;
+			if (now < fireAt) continue;
+
+			// Too late to be useful (sidecar was down, or event long past): mark it done silently.
+			if (now - fireAt < MAX_AGE_MS && now < start + MAX_AGE_MS) {
+				const [sent, total] = await sendToUser(r.user, reminderPayload(ev, minutes));
+				log(`reminder: ${r.id} (${ev.title}) -> ${sent}/${total} device(s)`);
+			}
+			await pb.collection('reminders').update(r.id, { firedFor: key }).catch(() => {});
+		}
+	} catch (err) {
+		log('reminder: sweep failed', err.message);
+	} finally {
+		remindersBusy.current = false;
 	}
 }
 
@@ -138,6 +215,7 @@ async function sweep() {
 	} catch (err) {
 		log('push: sweep failed', err.message);
 	}
+	await sweepReminders();
 }
 
 // ---------------------------------------------------------------- boot --
