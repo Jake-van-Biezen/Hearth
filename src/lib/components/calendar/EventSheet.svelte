@@ -6,7 +6,7 @@
 	import {
 		deleteEvent,
 		exceptOccurrence,
-		saveNewEvent,
+		saveNewEventWithId,
 		serverOrCachedEvent,
 		splitOccurrence,
 		updateEvent,
@@ -208,31 +208,22 @@
 	}
 
 	/**
-	 * Store this person's reminder once the event itself is on the server. New
-	 * events have no id client-side, so look up the one we just created.
+	 * Store this person's reminder once the event is on the server. `eventId`
+	 * is null when the event was queued offline or was a split occurrence.
 	 */
-	async function syncReminder(result: SaveResult, data: { title: string; startsAt: string; calendar: string; allDay: boolean; recurrence: string }) {
+	async function syncReminder(
+		result: SaveResult,
+		eventId: string | null,
+		data: { allDay: boolean; recurrence: string }
+	) {
 		const uid = pb.authStore.record?.id;
 		if (!uid || result !== 'sent' || !canRemind(data)) return;
 		if (reminder === (savedReminder?.minutesBefore ?? null)) return;
+		if (!eventId) {
+			toast.error("Saved the event, but its reminder isn't set. Set it again from the event.");
+			return;
+		}
 		try {
-			let eventId: string | null = editing && !(editing.recurrence && scope === 'one') ? editing.id : null;
-			if (!editing) {
-				const found = await pb.collection('events').getList<CalendarEvent>(1, 1, {
-					filter: pb.filter('createdBy = {:uid} && title = {:t} && startsAt = {:s} && calendar = {:c}', {
-						uid,
-						t: data.title,
-						s: data.startsAt,
-						c: data.calendar
-					}),
-					sort: '-created'
-				});
-				eventId = found.items[0]?.id ?? null;
-			}
-			if (!eventId) {
-				if (reminder !== null) toast.error("Couldn't set the reminder; set it again from the event.");
-				return;
-			}
 			await setReminder(uid, eventId, reminder, savedReminder);
 		} catch {
 			toast.error("Saved the event, but the reminder didn't stick. Try again when you're online.");
@@ -295,6 +286,7 @@
 		};
 		try {
 			let result: SaveResult = 'sent';
+			let createdId: string | null = null;
 			if (editing) {
 				if (editing.recurrence && scope === 'one') {
 					// Split: the series skips this day and a standalone event
@@ -328,14 +320,16 @@
 					result = await updateEvent(familyId, editing.id, data);
 				}
 			} else {
-				result = await saveNewEvent(familyId, {
+				const created = await saveNewEventWithId(familyId, {
 					...data,
 					createdBy: pb.authStore.record?.id ?? ''
 				});
+				result = created.result;
+				createdId = created.id;
 				localStorage.setItem(LAST_CAL_KEY, calendarId);
 			}
 			announce(result, `"${name}" saved.`);
-			await syncReminder(result, data);
+			await syncReminder(result, editing ? editing.id : createdId, data);
 			close();
 			onsaved();
 		} catch (err) {
