@@ -4,10 +4,17 @@ services:
     container_name: pocketbase
     restart: unless-stopped
     # Entrypoint is already "pocketbase serve ..."; pass flags only.
-    command: --http=0.0.0.0:8090 --dir=/pb/pb_data --migrationsDir=/pb/pb_migrations
+    command: --http=0.0.0.0:8090 --dir=/pb/pb_data --migrationsDir=/pb/pb_migrations --hooksDir=/pb/pb_hooks
+    environment:
+      - HEARTH_PUSH_EMAIL
+      - HEARTH_PUSH_PASSWORD
+      - VAPID_PUBLIC_KEY
+      - HEARTH_FAMILY_EMAILS
+      - HEARTH_FAMILY_ID
     volumes:
       - ./pb_data:/pb/pb_data
       - ./pb_migrations:/pb/pb_migrations
+      - ./pb_hooks:/pb/pb_hooks
     ports:
       - 8090:8090
     healthcheck:
@@ -15,3 +22,22 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  # Web Push sender. Optional for dev: without it the in-app Updates list
+  # still works, there are just no phone notifications.
+  push:
+    build: ./push
+    container_name: hearth-push
+    restart: unless-stopped
+    profiles: [push]
+    environment:
+      - PB_URL=http://pocketbase:8090
+      - HEARTH_PUSH_EMAIL
+      - HEARTH_PUSH_PASSWORD
+      - VAPID_PUBLIC_KEY
+      - VAPID_PRIVATE_KEY
+      - VAPID_SUBJECT
+      - TZ=Europe/Amsterdam
+    depends_on:
+      pocketbase:
+        condition: service_healthy

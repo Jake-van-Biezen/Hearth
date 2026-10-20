@@ -27,7 +27,9 @@ export default defineConfig({
 				theme_color: '#fbfaf4',
 				background_color: '#fbfaf4',
 				display: 'standalone',
+				id: '/',
 				start_url: '/',
+				scope: '/',
 				lang: 'en',
 				icons: [
 					{ src: 'icons/pwa-192.png', sizes: '192x192', type: 'image/png' },
@@ -37,6 +39,8 @@ export default defineConfig({
 			},
 			workbox: {
 				globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+				// Web Push + notification click handlers (static/push-sw.js).
+				importScripts: ['push-sw.js'],
 				// PocketBase owns these: API (incl. the OAuth2 redirect popup) and admin UI.
 				navigateFallbackDenylist: [/^\/api\//, /^\/_\//],
 				runtimeCaching: [

@@ -24,7 +24,11 @@ pnpm build       # production build (PWA service worker generated)
 - Deploy: `deploy/deploy-nas.sh` (build with blank `PUBLIC_POCKETBASE_URL` → same-origin, upload, restart)
 - `adapter-static` SPA (`fallback: index.html`, `ssr = false`); service worker must not handle `/api/` or `/_/`
 - `deploy/docker-compose.yml` — local dev PocketBase, port 8090
-- `deploy/pb_migrations/` — collections provisioned on boot: `families`, `calendars`, `events`
+- `deploy/pb_migrations/` — collections provisioned on boot: `families`, `calendars`, `events`, `notifications`, `push_subscriptions`
+- `deploy/pb_hooks/` — JSVM hooks (PocketBase 0.28 API; no `onServe`, and `onBootstrap` runs *before* migrations): event create/update/delete → one `notifications` row per other person who can see the event; push superuser bootstrap; `/api/hearth/push/key`, `/api/hearth/notifications/read-all`; membership (`HEARTH_FAMILY_EMAILS` allowlist auto-joins on signup, every member gets a private personal calendar, event moves into unseen calendars rejected)
+- Calendars: `visibility = "private"` + `owner` → only the owner sees the calendar and its events (enforced in API rules, so realtime too). Shared calendars have no owner
+- `deploy/push/` — Node sidecar (`hearth-push`): watches `notifications`, sends Web Push (VAPID) to `push_subscriptions`, stamps `pushedAt`, prunes 404/410 subs. Env in `deploy/.env.example`
+- Service worker push/click handlers: `static/push-sw.js` (pulled in via `workbox.importScripts`)
 - Dev frontend points at `PUBLIC_POCKETBASE_URL` (copy `.env.example` → `.env`)
 
 ## Design

@@ -7,7 +7,9 @@ export type Calendar = RecordModel & {
 	family: string;
 	name: string;
 	color: string;
+	/** `private`: only `owner` can see it (each member's personal calendar). */
 	visibility: 'family' | 'private';
+	owner: string;
 };
 
 export type CalendarEvent = RecordModel & {
@@ -136,7 +138,8 @@ export async function loadFamily(userId: string): Promise<Family | null> {
 export function loadCalendars(familyId: string): Promise<Calendar[]> {
 	return pb.collection('calendars').getFullList<Calendar>({
 		filter: pb.filter('family = {:fid}', { fid: familyId }),
-		sort: 'name'
+		// Shared calendars first ("family" < "private"), then your own.
+		sort: 'visibility,name'
 	});
 }
 

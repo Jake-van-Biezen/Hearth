@@ -1,14 +1,25 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { ChevronLeft, ChevronRight, Plus } from '@lucide/svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
+	import { goto, replaceState } from '$app/navigation';
+	import { page } from '$app/state';
+	import { Bell, ChevronLeft, ChevronRight, Lock, Plus } from '@lucide/svelte';
 	import { pb } from '$lib/pocketbase';
 	import EventSheet from '$lib/components/calendar/EventSheet.svelte';
+	import UpdatesSheet from '$lib/components/calendar/UpdatesSheet.svelte';
+	import {
+		forgetPushOnSignOut,
+		loadNotifications,
+		markAllRead,
+		markRead,
+		syncPush,
+		type FamilyNotification
+	} from '$lib/notifications';
 	import {
 		addDays,
 		chipText,
 		formatTime,
 		formatWeekRange,
+		fromDateInput,
 		isoWeek,
 		loadCalendars,
 		loadFamily,
@@ -38,8 +49,15 @@
 	let weekStart = $state(startOfWeek(new Date()));
 	let firstPaint = $state(true);
 	let sheet: ReturnType<typeof EventSheet> | undefined = $state();
+	let updatesSheet: ReturnType<typeof UpdatesSheet> | undefined = $state();
+	let updates: FamilyNotification[] = $state([]);
+	let updatesFailed = $state(false);
+	/** Event to briefly highlight after jumping to it from an update. */
+	let flashId: string | null = $state(null);
+	let flashTimer: ReturnType<typeof setTimeout> | undefined;
 
 	const calById = $derived(new Map(calendars.map((c) => [c.id, c])));
+	const unread = $derived(updates.filter((n) => !n.readAt).length);
 	const isThisWeek = $derived(sameDay(weekStart, startOfWeek(today)));
 
 	const days = $derived(
@@ -96,6 +114,53 @@
 		}
 	}
 
+	async function loadUpdates() {
+		try {
+			updates = await loadNotifications();
+			updatesFailed = false;
+		} catch (e) {
+			if ((e as { isAbort?: boolean }).isAbort) return;
+			updatesFailed = true;
+		}
+	}
+
+	function setLocalRead(ids: Set<string> | null) {
+		const now = new Date().toISOString();
+		updates = updates.map((n) => (!n.readAt && (!ids || ids.has(n.id)) ? { ...n, readAt: now } : n));
+	}
+
+	/**
+	 * Follow a link from a push notification: /calendar?day=yyyy-mm-dd&event=id&n=notificationId.
+	 * Returns true when it moved the week (caller reloads).
+	 */
+	function applyLink(params: URLSearchParams): boolean {
+		const nid = params.get('n');
+		if (nid) {
+			markRead(nid).catch(() => {});
+			setLocalRead(new Set([nid]));
+		}
+		const day = fromDateInput(params.get('day') ?? '');
+		if (!day) return false;
+		jumpTo(day, params.get('event'));
+		return true;
+	}
+
+	function jumpTo(day: Date, eventId: string | null) {
+		firstPaint = false;
+		weekStart = startOfWeek(day);
+		clearTimeout(flashTimer);
+		flashId = eventId;
+		if (eventId) flashTimer = setTimeout(() => (flashId = null), 2600);
+	}
+
+	async function revealFlash() {
+		if (!flashId) return;
+		await tick();
+		document
+			.querySelector(`[data-ev="${CSS.escape(flashId)}"]`)
+			?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+	}
+
 	async function boot() {
 		status = 'loading';
 		const uid = pb.authStore.record?.id;
@@ -108,8 +173,14 @@
 			}
 			calendars = await loadCalendars(family.id);
 			status = 'ready';
-			await loadWeek();
+			if (page.url.search) {
+				applyLink(page.url.searchParams);
+				replaceState('/calendar', {});
+			}
+			await Promise.all([loadWeek(), loadUpdates()]);
+			revealFlash();
 			subscribe();
+			syncPush();
 		} catch (e) {
 			const code = (e as { status?: number }).status ?? 0;
 			if (code === 401) return signOut();
@@ -126,14 +197,50 @@
 				if (family) calendars = await loadCalendars(family.id);
 				loadWeek();
 			});
+			// The list rule limits this to our own notifications.
+			const offUpdates = await pb.collection('notifications').subscribe('*', () => loadUpdates());
 			unsubscribe = () => {
 				offEvents();
 				offCals();
+				offUpdates();
 			};
 		} catch {
 			// Live updates are a bonus; the week still loads on navigation.
 		}
 	}
+
+	function openUpdates() {
+		updatesSheet?.open();
+		if (!unread) return;
+		markAllRead()
+			.then(() => setLocalRead(null))
+			.catch(() => {});
+	}
+
+	async function pickUpdate(n: FamilyNotification) {
+		updatesSheet?.close();
+		const start = parseDate(n.eventStartsAt);
+		if (!start) return;
+		jumpTo(start, n.action === 'delete' ? null : n.eventId);
+		await loadWeek();
+		revealFlash();
+	}
+
+	// Tapping a push while Hearth is already open: the service worker hands
+	// us the link instead of reloading the page.
+	onMount(() => {
+		const sw = navigator.serviceWorker;
+		if (!sw) return;
+		const onMessage = async (e: MessageEvent) => {
+			if (e.data?.type !== 'hearth:navigate' || status !== 'ready') return;
+			const moved = applyLink(new URL(e.data.url, location.origin).searchParams);
+			if (!moved) return;
+			await loadWeek();
+			revealFlash();
+		};
+		sw.addEventListener('message', onMessage);
+		return () => sw.removeEventListener('message', onMessage);
+	});
 
 	function shiftWeek(n: number) {
 		firstPaint = false;
@@ -153,7 +260,10 @@
 		sheet?.open(target);
 	}
 
-	function signOut() {
+	async function signOut() {
+		unsubscribe?.();
+		unsubscribe = null;
+		if (pb.authStore.isValid) await forgetPushOnSignOut();
 		pb.authStore.clear();
 		goto('/', { replaceState: true });
 	}
@@ -167,6 +277,7 @@
 			if (wasThisWeek) weekStart = startOfWeek(now);
 		}
 		loadWeek();
+		loadUpdates();
 	}
 
 	$effect(() => {
@@ -177,7 +288,10 @@
 		boot();
 	});
 
-	onDestroy(() => unsubscribe?.());
+	onDestroy(() => {
+		unsubscribe?.();
+		clearTimeout(flashTimer);
+	});
 </script>
 
 <svelte:head>
@@ -232,7 +346,19 @@
 			</section>
 		{:else}
 			<header class="top">
-				<h1 class="fam">{family?.name ?? 'Hearth'}</h1>
+				<div class="titlerow">
+					<h1 class="fam">{family?.name ?? 'Hearth'}</h1>
+					<button
+						class="round bell"
+						onclick={openUpdates}
+						aria-label={unread ? `Updates, ${unread} new` : 'Updates'}
+					>
+						<Bell size={20} strokeWidth={2.25} />
+						{#if unread}
+							<span class="badge" aria-hidden="true">{unread > 9 ? '9+' : unread}</span>
+						{/if}
+					</button>
+				</div>
 				<div class="bar">
 					<p class="range">
 						<span class="dates">{formatWeekRange(weekStart)}</span>
@@ -290,6 +416,8 @@
 										class="chip"
 										class:allday={ev.allDay}
 										class:press={firstPaint}
+										class:flash={ev.id === flashId}
+										data-ev={ev.id}
 										style={ev.allDay
 											? `--c:${color}`
 											: `--c:${color};background:${color};color:${chipText(color)}`}
@@ -340,7 +468,13 @@
 				{#if calendars.length}
 					<ul class="legend" aria-label="Calendars">
 						{#each calendars as cal (cal.id)}
-							<li style={`--c:${cal.color}`}>{cal.name}</li>
+							<li style={`--c:${cal.color}`}>
+								{cal.name}
+								{#if cal.visibility === 'private'}
+									<Lock size={12} strokeWidth={2.25} aria-hidden="true" />
+									<span class="sr">(only you)</span>
+								{/if}
+							</li>
 						{/each}
 					</ul>
 				{/if}
@@ -359,6 +493,14 @@
 </main>
 
 <EventSheet bind:this={sheet} {calendars} onsaved={loadWeek} />
+<UpdatesSheet
+	bind:this={updatesSheet}
+	items={updates}
+	{calendars}
+	failed={updatesFailed}
+	onretry={loadUpdates}
+	onpick={pickUpdate}
+/>
 
 <style>
 	.page {
@@ -424,6 +566,43 @@
 
 	.top {
 		margin-bottom: 14px;
+	}
+
+	.titlerow {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 12px;
+	}
+
+	.titlerow .fam {
+		min-width: 0;
+	}
+
+	.bell {
+		position: relative;
+		flex-shrink: 0;
+		margin-top: 2px;
+	}
+
+	.badge {
+		position: absolute;
+		top: -3px;
+		right: -7px;
+		min-width: 18px;
+		height: 18px;
+		padding: 0 4px;
+		display: grid;
+		place-items: center;
+		border-radius: 999px;
+		border: 2px solid #fbfaf4;
+		background: #c0392b;
+		color: #ffffff;
+		font-size: 11px;
+		font-weight: 700;
+		line-height: 1;
+		font-variant-numeric: tabular-nums;
+		box-sizing: content-box;
 	}
 
 	/* Wraps the week buttons under the dates on very narrow screens instead
@@ -783,6 +962,27 @@
 		}
 	}
 
+	/* Jumped here from an update: circle it like a marker would. */
+	.chip.flash {
+		animation: circled 2400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+
+	@keyframes circled {
+		0% {
+			outline: 2.5px solid rgba(192, 57, 43, 0);
+			outline-offset: 7px;
+		}
+		18%,
+		70% {
+			outline: 2.5px solid rgba(192, 57, 43, 1);
+			outline-offset: 2px;
+		}
+		100% {
+			outline: 2.5px solid rgba(192, 57, 43, 0);
+			outline-offset: 2px;
+		}
+	}
+
 	.free {
 		font-size: 13px;
 		color: #666b76;
@@ -965,6 +1165,12 @@
 		.sheet.hang,
 		.chip.press {
 			animation: none;
+		}
+
+		.chip.flash {
+			animation: none;
+			outline: 2.5px solid #c0392b;
+			outline-offset: 2px;
 		}
 	}
 </style>

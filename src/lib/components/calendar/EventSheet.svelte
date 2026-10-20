@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X } from '@lucide/svelte';
+	import { Lock, X } from '@lucide/svelte';
 	import { pb } from '$lib/pocketbase';
 	import {
 		addDays,
@@ -40,6 +40,8 @@
 	let busy = $state(false);
 	let confirmDelete = $state(false);
 	let error = $state('');
+
+	const isPrivate = $derived(calendars.find((c) => c.id === calendarId)?.visibility === 'private');
 
 	const endDayLabel = $derived.by(() => {
 		if (!spanDays) return '';
@@ -261,9 +263,15 @@
 						<input type="radio" name="calendar" value={cal.id} bind:group={calendarId} />
 						<span class="sw" aria-hidden="true"></span>
 						<span>{cal.name}</span>
+						{#if cal.visibility === 'private'}
+							<Lock size={13} strokeWidth={2.25} aria-hidden="true" class="lock" />
+						{/if}
 					</label>
 				{/each}
 			</div>
+			{#if isPrivate}
+				<p class="hint private">Only you can see events on this calendar.</p>
+			{/if}
 		</fieldset>
 
 		{#if error}
@@ -527,6 +535,15 @@
 		border: 2px solid #22252a;
 		padding: 0 13px 0 11px;
 		background: #f6f2e9;
+	}
+
+	.cal :global(.lock) {
+		color: #4c5260;
+		margin-left: -2px;
+	}
+
+	.hint.private {
+		margin-top: 8px;
 	}
 
 	.error {
