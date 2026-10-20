@@ -9,6 +9,7 @@
 		cachedNextUp,
 		cachedFamily,
 		clearCachedData,
+		forgetEvent,
 		isNetError,
 		noteOffline,
 		offline,
@@ -339,7 +340,12 @@
 	async function subscribe() {
 		if (unsubscribe || !offline.online) return;
 		try {
-			const offEvents = await pb.collection('events').subscribe('*', () => loadView());
+			const offEvents = await pb.collection('events').subscribe('*', (e) => {
+				// Deleted elsewhere: drop it from the offline cache too, or it
+				// flashes up whenever a week paints from the cache.
+				if (e.action === 'delete' && family) forgetEvent(family.id, e.record.id);
+				loadView();
+			});
 			const offCals = await pb.collection('calendars').subscribe('*', async () => {
 				if (family) calendars = await loadCalendars(family.id);
 				loadView();

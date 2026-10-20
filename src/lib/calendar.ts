@@ -5,6 +5,7 @@ import {
 	cachedFamily,
 	cachedNextUp,
 	cachedWindowEvents,
+	inWindow,
 	isNetError,
 	noteOffline,
 	noteOnline,
@@ -219,7 +220,7 @@ export async function loadWeekEvents(
 			requestKey: 'hearth-week'
 		});
 		noteOnline();
-		saveEvents(familyId, evs);
+		saveEvents(familyId, evs, inWindow(weekStart, end));
 		return expandRecurring(evs, weekStart, end);
 	} catch (err) {
 		if (!isNetError(err)) throw err;
@@ -252,7 +253,7 @@ export function loadRangeEvents(
 		})
 		.then((evs) => {
 			noteOnline();
-			saveEvents(familyId, evs);
+			saveEvents(familyId, evs, inWindow(start, end));
 			return expandRecurring(evs, start, end);
 		})
 		.catch((err) => {
@@ -280,7 +281,12 @@ export async function primeOfflineCache(familyId: string): Promise<void> {
 			}),
 			requestKey: 'hearth-prime'
 		});
-		saveEvents(familyId, evs);
+		const lo = from.getTime();
+		const hi = to.getTime();
+		saveEvents(familyId, evs, (ev) => {
+			const at = parseDate(ev.startsAt)?.getTime();
+			return at !== undefined && at >= lo && at < hi;
+		});
 	} catch {
 		// Whatever the user browsed before is already cached.
 	}

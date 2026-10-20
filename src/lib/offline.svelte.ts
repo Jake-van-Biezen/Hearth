@@ -97,10 +97,42 @@ function eventStore(fid: string): EventStore {
 	return read<EventStore>(evKey(fid)) ?? { events: {} };
 }
 
-export function saveEvents(fid: string, records: CalendarEvent[]): void {
-	if (!fid || !records.length) return;
+/** Server ids a queued op still has to touch; the cache is ahead of the server for them. */
+function pendingIds(): Set<string> {
+	const out = new Set<string>();
+	for (const op of queue) {
+		if (op.id) out.add(ids.get(op.id) ?? op.id);
+		if (op.seriesId) out.add(ids.get(op.seriesId) ?? op.seriesId);
+	}
+	return out;
+}
+
+/**
+ * Stash fetched records. With `covers`, `records` is the server's complete
+ * answer for that slice: cached records the slice should hold but the
+ * server didn't return were deleted (here or on another device), so they go
+ * too. Without this a deleted event lives on in the cache and flashes up
+ * every time a week paints from it before the network answers.
+ */
+export function saveEvents(
+	fid: string,
+	records: CalendarEvent[],
+	covers?: (ev: CalendarEvent) => boolean
+): void {
+	if (!fid) return;
 	const store = eventStore(fid);
 	let dirty = false;
+	if (covers) {
+		const fresh = new Set(records.map((r) => r?.id));
+		const pending = pendingIds();
+		for (const [id, ev] of Object.entries(store.events)) {
+			if (fresh.has(id) || id.startsWith(LOCAL_PREFIX) || pending.has(id)) continue;
+			if (covers(ev)) {
+				delete store.events[id];
+				dirty = true;
+			}
+		}
+	}
 	for (const rec of records) {
 		if (!rec?.id) continue;
 		if (JSON.stringify(store.events[rec.id]) !== JSON.stringify(rec)) {
@@ -164,15 +196,25 @@ export function cachedEvents(fid: string): CalendarEvent[] {
  * empty; that still beats showing nothing.
  */
 export function cachedWindowEvents(fid: string, start: Date, end: Date): CalendarEvent[] {
+	return cachedEvents(fid).filter(inWindow(start, end));
+}
+
+/** Client mirror of calendar.ts WINDOW_FILTER: does the window query return `ev`? */
+export function inWindow(start: Date, end: Date): (ev: CalendarEvent) => boolean {
 	const s = start.getTime();
 	const e = end.getTime();
-	return cachedEvents(fid).filter((ev) => {
+	return (ev) => {
 		const st = parseDate(ev.startsAt);
 		if (!st) return false;
 		const en = parseDate(ev.endsAt ?? '') ?? st;
 		if (st.getTime() >= e) return false;
 		return st.getTime() >= s || en.getTime() > s || (!!ev.recurrence && st.getTime() < s);
-	});
+	};
+}
+
+/** Drop an event (and its split-offs) the server says is gone. */
+export function forgetEvent(fid: string, id: string): void {
+	if (fid && id) purgeEvent(fid, id);
 }
 
 /** Mirror of loadNextUp's server queries, over the cache. */
@@ -349,7 +391,13 @@ async function sendOp(op: QueuedOp): Promise<{ id?: string }> {
 		}
 		case 'delete': {
 			const id = ids.get(op.id!) ?? op.id!;
-			await pb.collection('events').delete(id);
+			try {
+				await pb.collection('events').delete(id);
+			} catch (err) {
+				// Already gone (another device, or the series took it along):
+				// that's the outcome we wanted, so just forget it here too.
+				if ((err as { status?: number }).status !== 404) throw err;
+			}
 			if (op.fid) purgeEvent(op.fid, id);
 			return {};
 		}
@@ -382,9 +430,11 @@ async function sendOp(op: QueuedOp): Promise<{ id?: string }> {
 		case 'except': {
 			const id = ids.get(op.seriesId!) ?? op.seriesId!;
 			const base = await pb.collection('events').getOne<CalendarEvent>(id);
+			// Add the day (deduped): the series skips it from now on.
 			const others = (base.exceptions ?? []).filter((x) => x.d !== op.key);
-			await pb.collection('events').update(base.id, { exceptions: others });
-			if (op.fid) stashEvent(op.fid, { ...base, exceptions: others });
+			const exceptions = [...others, { d: op.key! }];
+			const rec = await pb.collection('events').update<CalendarEvent>(base.id, { exceptions });
+			if (op.fid) stashEvent(op.fid, rec);
 			return {};
 		}
 		case 'read': {

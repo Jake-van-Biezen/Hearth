@@ -22,8 +22,7 @@
 		startOfDay,
 		toDateInput,
 		type Calendar,
-		type CalendarEvent,
-		type EventException
+		type CalendarEvent
 	} from '$lib/calendar';
 
 	let {
@@ -161,21 +160,6 @@
 		}
 	}
 
-	/**
-	 * Add or remove the tapped day from the series' exceptions. Removing
-	 * restores the regular occurrence; adding covers it over.
-	 */
-	async function toggleOccurrence(id: string, key: string, drop: boolean): Promise<SaveResult> {
-		if (drop) {
-			return await exceptOccurrence(familyId, id, key);
-		}
-		const base = await serverOrCachedEvent(id, familyId);
-		if (!base) return 'sent';
-		const others = (base.exceptions ?? []).filter((x) => x.d !== key);
-		const exceptions: EventException[] = [...others, { d: key }];
-		return await updateEvent(familyId, base.id, { exceptions });
-	}
-
 	async function remove() {
 		if (!editing) return;
 		if (!confirmDelete) {
@@ -188,7 +172,8 @@
 			let result: SaveResult = 'sent';
 			if (editing.recurrence && scope === 'one') {
 				const key = amsDateKey(parseDate(editing.startsAt) ?? new Date());
-				result = await toggleOccurrence(editing.id, key, true);
+				// The series skips this day from now on.
+				result = await exceptOccurrence(familyId, editing.id, key);
 				announce(result, `Removed that day's "${editing.title}".`);
 			} else {
 				result = await deleteEvent(familyId, editing.id);
