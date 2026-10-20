@@ -136,22 +136,23 @@ async function deliver(n) {
 
 const remindersBusy = { current: false };
 
-/** Human lead time: "at start", "15 min", "1 h", "1 day". */
+/** Human time left: "15 min", "1 h", "1 day". Only called with min > 0. */
 function leadText(min) {
-	if (min === 0) return '';
 	if (min < 60) return `in ${min} min`;
 	if (min % 1440 === 0) return `in ${min / 1440} day${min === 1440 ? '' : 's'}`;
 	if (min % 60 === 0) return `in ${min / 60} h`;
 	return `in ${Math.floor(min / 60)} h ${min % 60} min`;
 }
 
-function reminderPayload(ev, minutes) {
+/** Text uses the real time left, which can be less than the reminder offset (e.g. event created 10 min out with a 15 min reminder). */
+function reminderPayload(ev, now) {
 	const start = parse(ev.startsAt);
 	const when = timeFmt.format(start);
+	const left = Math.round((start.getTime() - now) / 60_000);
 	const params = new URLSearchParams({ day: isoDayFmt.format(start), event: ev.id });
 	return JSON.stringify({
 		title: ev.title,
-		body: minutes === 0 ? `Starts at ${when}` : `Starts ${leadText(minutes)}, at ${when}`,
+		body: left <= 0 ? `Starts at ${when}` : `Starts ${leadText(left)}, at ${when}`,
 		tag: `reminder-${ev.id}`,
 		url: `/calendar?${params}`
 	});
@@ -192,7 +193,7 @@ async function sweepReminders() {
 
 			// Too late to be useful (sidecar was down, or event long past): mark it done silently.
 			if (now - fireAt < MAX_AGE_MS && now < start + MAX_AGE_MS) {
-				const [sent, total] = await sendToUser(r.user, reminderPayload(ev, minutes));
+				const [sent, total] = await sendToUser(r.user, reminderPayload(ev, now));
 				log(`reminder: ${r.id} (${ev.title}) -> ${sent}/${total} device(s)`);
 			}
 			await pb.collection('reminders').update(r.id, { firedFor: key }).catch(() => {});
