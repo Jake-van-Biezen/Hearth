@@ -41,3 +41,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 ## Unresolved decisions
 
 Event edit/delete, calendar visibility toggles, private-calendar semantics, notifications, kids' UX.
+
+## Month view addendum (extension, 2026-10-20)
+
+Same surface, second mode. Week | Month segmented pill in the header (active segment ink); month view swaps the planner spread for a ruled month sheet: Permanent Marker weekday labels over a 2px-ink-framed 7-column grid whose internal rules are the 1px gaps between cell grounds (the bg-gap trick, no cell borders). Cells: Karla tabular day number (today = marker-red circle), weekend columns in weekend-tint, out-of-month cells dimmed. Events are one-line 11px chips: 6px calendar-color dot (hollow ring for all-day) + planner shorthand, max 2 then `+N`. Tapping a day unfolds a white day panel below the sheet (WED 21 marker header, full week-style chips, per-day plus; tapping again closes) — the panel is the month view's "Next up"-slot moment. Prev/Today/next pills drive month nav; `?v=month` persists the mode; remove it on any event deep link, which always lands in the week view.

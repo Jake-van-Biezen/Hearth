@@ -143,6 +143,17 @@ export function loadCalendars(familyId: string): Promise<Calendar[]> {
 	});
 }
 
+/** Whole days of the local month containing `d`. */
+export function monthBounds(d: Date): { first: Date; last: Date } {
+	const first = new Date(d.getFullYear(), d.getMonth(), 1);
+	return { first, last: new Date(d.getFullYear(), d.getMonth() + 1, 0) };
+}
+
+/** "October 2026". */
+export function formatMonthRange(first: Date): string {
+	return new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(first);
+}
+
 export function loadWeekEvents(familyId: string, weekStart: Date): Promise<CalendarEvent[]> {
 	const end = addDays(weekStart, 7);
 	return pb.collection('events').getFullList<CalendarEvent>({
@@ -152,6 +163,22 @@ export function loadWeekEvents(familyId: string, weekStart: Date): Promise<Calen
 		),
 		sort: 'startsAt',
 		requestKey: 'hearth-week'
+	});
+}
+
+export function loadRangeEvents(
+	familyId: string,
+	start: Date,
+	end: Date,
+	requestKey: string
+): Promise<CalendarEvent[]> {
+	return pb.collection('events').getFullList<CalendarEvent>({
+		filter: pb.filter(
+			'calendar.family = {:fid} && startsAt < {:end} && (startsAt >= {:start} || endsAt > {:start})',
+			{ fid: familyId, start, end }
+		),
+		sort: 'startsAt',
+		requestKey
 	});
 }
 

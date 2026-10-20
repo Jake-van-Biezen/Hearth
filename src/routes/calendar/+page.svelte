@@ -17,6 +17,8 @@
 	import {
 		addDays,
 		chipText,
+		daysBetween,
+		formatMonthRange,
 		formatTime,
 		formatWeekRange,
 		fromDateInput,
@@ -24,7 +26,9 @@
 		loadCalendars,
 		loadFamily,
 		loadNextUp,
+		loadRangeEvents,
 		loadWeekEvents,
+		monthBounds,
 		onDay,
 		parseDate,
 		sameDay,
@@ -37,6 +41,7 @@
 	} from '$lib/calendar';
 
 	type Status = 'loading' | 'ready' | 'no-family' | 'offline' | 'error';
+	type View = 'week' | 'month';
 
 	let status: Status = $state('loading');
 	let family: Family | null = $state(null);
@@ -47,6 +52,10 @@
 	let weekError = $state(false);
 	let today = $state(startOfDay(new Date()));
 	let weekStart = $state(startOfWeek(new Date()));
+	let view: View = $state('week');
+	let monthStart = $state(startOfDay(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+	let monthEvents: CalendarEvent[] = $state([]);
+	let selectedDay: Date | null = $state(null);
 	let firstPaint = $state(true);
 	let sheet: ReturnType<typeof EventSheet> | undefined = $state();
 	let updatesSheet: ReturnType<typeof UpdatesSheet> | undefined = $state();
@@ -73,6 +82,57 @@
 			};
 		})
 	);
+
+	type MonthCell = {
+		date: Date;
+		num: number;
+		dim: boolean;
+		isToday: boolean;
+		weekend: boolean;
+		selected: boolean;
+		events: CalendarEvent[];
+	};
+
+	const mBounds = $derived(monthBounds(monthStart));
+	const mGridStart = $derived(startOfWeek(mBounds.first));
+	const mWeeks = $derived(Math.max(4, Math.ceil((daysBetween(mGridStart, mBounds.last) + 1) / 7)));
+	const mRange = $derived(formatMonthRange(monthStart));
+	const isThisMonth = $derived(
+		today.getFullYear() === monthStart.getFullYear() && today.getMonth() === monthStart.getMonth()
+	);
+	const wdLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
+
+	const selEvents = $derived.by(() => {
+		const d = selectedDay;
+		if (!d) return [];
+		return monthEvents.filter((e) => onDay(e, d)).sort(sortForDay);
+	});
+	const selLong = $derived.by(() => {
+		const d = selectedDay;
+		if (!d) return '';
+		return d.toLocaleDateString('en-GB', {
+			weekday: 'long',
+			day: 'numeric',
+			month: 'long'
+		});
+	});
+
+	const mCells = $derived.by(() => {
+		const cells: MonthCell[] = [];
+		for (let i = 0; i < mWeeks * 7; i++) {
+			const date = addDays(mGridStart, i);
+			cells.push({
+				date,
+				num: date.getDate(),
+				dim: date < mBounds.first || date > mBounds.last,
+				isToday: sameDay(date, today),
+				weekend: i % 7 >= 5,
+				selected: selectedDay !== null && sameDay(date, selectedDay),
+				events: monthEvents.filter((e) => onDay(e, date)).sort(sortForDay)
+			});
+		}
+		return cells;
+	});
 
 	function chipTime(ev: CalendarEvent, day: Date): string {
 		if (ev.allDay) return '';
@@ -114,6 +174,30 @@
 		}
 	}
 
+	async function loadMonth() {
+		if (!family) return;
+		const fid = family.id;
+		const gs = mGridStart;
+		weekLoading = true;
+		weekError = false;
+		try {
+			const end = addDays(gs, mWeeks * 7);
+			const evs = await loadRangeEvents(fid, gs, end, 'hearth-month');
+			if (gs !== mGridStart) return;
+			monthEvents = evs;
+		} catch (e) {
+			if ((e as { isAbort?: boolean }).isAbort) return;
+			if (gs === mGridStart) weekError = true;
+		} finally {
+			if (gs === mGridStart) weekLoading = false;
+		}
+	}
+
+	function loadView() {
+		if (view === 'week') loadWeek();
+		else loadMonth();
+	}
+
 	async function loadUpdates() {
 		try {
 			updates = await loadNotifications();
@@ -133,7 +217,7 @@
 	 * Follow a link from a push notification: /calendar?day=yyyy-mm-dd&event=id&n=notificationId.
 	 * Returns true when it moved the week (caller reloads).
 	 */
-	function applyLink(params: URLSearchParams): boolean {
+		function applyLink(params: URLSearchParams): boolean {
 		const nid = params.get('n');
 		if (nid) {
 			markRead(nid).catch(() => {});
@@ -141,6 +225,8 @@
 		}
 		const day = fromDateInput(params.get('day') ?? '');
 		if (!day) return false;
+		view = 'week';
+		selectedDay = null;
 		jumpTo(day, params.get('event'));
 		return true;
 	}
@@ -177,7 +263,11 @@
 				applyLink(page.url.searchParams);
 				replaceState('/calendar', {});
 			}
-			await Promise.all([loadWeek(), loadUpdates()]);
+			if (view === 'week' && new URLSearchParams(window.location.search).get('v') === 'month') {
+				view = 'month';
+				replaceState('/calendar?v=month', {});
+			}
+			await Promise.all([loadView(), loadUpdates()]);
 			revealFlash();
 			subscribe();
 			syncPush();
@@ -192,10 +282,10 @@
 	async function subscribe() {
 		if (unsubscribe) return;
 		try {
-			const offEvents = await pb.collection('events').subscribe('*', () => loadWeek());
+			const offEvents = await pb.collection('events').subscribe('*', () => loadView());
 			const offCals = await pb.collection('calendars').subscribe('*', async () => {
 				if (family) calendars = await loadCalendars(family.id);
-				loadWeek();
+				loadView();
 			});
 			// The list rule limits this to our own notifications.
 			const offUpdates = await pb.collection('notifications').subscribe('*', () => loadUpdates());
@@ -221,6 +311,8 @@
 		updatesSheet?.close();
 		const start = parseDate(n.eventStartsAt);
 		if (!start) return;
+		view = 'week';
+		selectedDay = null;
 		jumpTo(start, n.action === 'delete' ? null : n.eventId);
 		await loadWeek();
 		revealFlash();
@@ -244,19 +336,66 @@
 
 	function shiftWeek(n: number) {
 		firstPaint = false;
+		selectedDay = null;
 		weekStart = addDays(weekStart, n * 7);
 		loadWeek();
+	}
+
+	function shiftMonth(n: number) {
+		firstPaint = false;
+		selectedDay = null;
+		monthStart = new Date(monthStart.getFullYear(), monthStart.getMonth() + n, 1);
+		loadMonth();
 	}
 
 	function goToday() {
 		firstPaint = false;
 		today = startOfDay(new Date());
 		weekStart = startOfWeek(today);
-		loadWeek();
+		loadView();
+	}
+
+	function goThisMonth() {
+		firstPaint = false;
+		today = startOfDay(new Date());
+		monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+		loadMonth();
+	}
+
+	/** Week | Month toggle. Month keeps no selection; week keeps its week. */
+	function setView(v: View) {
+		if (v === view) return;
+		view = v;
+		if (v === 'month') {
+			monthStart = new Date(
+				selectedDay?.getFullYear() ?? today.getFullYear(),
+				(selectedDay?.getMonth() ?? today.getMonth()),
+				1
+			);
+			selectedDay = null;
+			replaceState('/calendar?v=month', {});
+			loadMonth();
+		} else {
+			weekStart = startOfWeek(selectedDay ?? today);
+			replaceState('/calendar', {});
+			loadWeek();
+		}
+	}
+
+	function tapDay(cell: MonthCell) {
+		if (cell.selected) {
+			selectedDay = null;
+			return;
+		}
+		firstPaint = false;
+		selectedDay = new Date(cell.date);
 	}
 
 	function openAdd(day?: Date) {
-		const target = day ?? (isThisWeek ? today : weekStart);
+		const target =
+			day ??
+			(selectedDay ??
+				(view === 'week' ? (isThisWeek ? today : weekStart) : monthBounds(monthStart).first));
 		sheet?.open(target);
 	}
 
@@ -276,7 +415,7 @@
 			today = now;
 			if (wasThisWeek) weekStart = startOfWeek(now);
 		}
-		loadWeek();
+		loadView();
 		loadUpdates();
 	}
 
@@ -361,30 +500,55 @@
 				</div>
 				<div class="bar">
 					<p class="range">
-						<span class="dates">{formatWeekRange(weekStart)}</span>
-						<span class="wk">week {isoWeek(weekStart)}</span>
+						<span class="dates">{view === 'week' ? formatWeekRange(weekStart) : mRange}</span>
+						{#if view === 'week'}<span class="wk">week {isoWeek(weekStart)}</span>{/if}
 					</p>
-					<nav class="weeknav" aria-label="Change week">
-						<button class="round" onclick={() => shiftWeek(-1)} aria-label="Previous week">
-							<ChevronLeft size={20} strokeWidth={2.25} />
-						</button>
-						<button class="pill small" onclick={goToday} disabled={isThisWeek}>Today</button>
-						<button class="round" onclick={() => shiftWeek(1)} aria-label="Next week">
-							<ChevronRight size={20} strokeWidth={2.25} />
-						</button>
-					</nav>
+					<div class="ctl">
+						<nav class="weeknav" aria-label="Change {view === 'week' ? 'week' : 'month'}">
+							<button
+								class="round"
+								onclick={() => (view === 'week' ? shiftWeek(-1) : shiftMonth(-1))}
+								aria-label="Previous {view === 'week' ? 'week' : 'month'}"
+							>
+								<ChevronLeft size={20} strokeWidth={2.25} />
+							</button>
+							<button
+								class="pill small"
+								onclick={view === 'week' ? goToday : goThisMonth}
+								disabled={view === 'week' ? isThisWeek : isThisMonth}
+							>
+								Today
+							</button>
+							<button
+								class="round"
+								onclick={() => (view === 'week' ? shiftWeek(1) : shiftMonth(1))}
+								aria-label="Next {view === 'week' ? 'week' : 'month'}"
+							>
+								<ChevronRight size={20} strokeWidth={2.25} />
+							</button>
+						</nav>
+						<div class="modes" role="group" aria-label="Calendar mode">
+							<button class="mode" aria-pressed={view === 'week'} onclick={() => setView('week')}>
+								Week
+							</button>
+							<button class="mode" aria-pressed={view === 'month'} onclick={() => setView('month')}>
+								Month
+							</button>
+						</div>
+					</div>
 				</div>
 			</header>
 
 			{#if weekError}
 				<p class="banner" role="alert">
-					Couldn't load this week from the home server.
-					<button class="link" onclick={loadWeek}>Try again</button>
+					Couldn't load {view === 'week' ? 'this week' : 'this month'} from the home server.
+					<button class="link" onclick={loadView}>Try again</button>
 				</p>
 			{/if}
 
-			<div class="spread" aria-busy={status === 'loading' || weekLoading}>
-				{#each days as day, d (day.date.getTime())}
+			{#if view === 'week'}
+				<div class="spread" aria-busy={status === 'loading' || weekLoading}>
+					{#each days as day, d (day.date.getTime())}
 					<section
 						class="box"
 						class:today={day.isToday}
@@ -455,7 +619,91 @@
 						<p class="none">Nothing coming up. Enjoy the quiet.</p>
 					{/if}
 				</section>
-			</div>
+				</div>
+			{:else}
+				<div class="mpanel" aria-busy={status === 'loading' || weekLoading}>
+					<ol class="wdays" aria-label="Days of the week">
+						{#each wdLabels as lbl, i (lbl)}
+							<li class:weekend={i >= 5}>{lbl}</li>
+						{/each}
+					</ol>
+					<div class="mgrid" style={`--rows:${mWeeks}`}>
+						{#each mCells as cell (cell.date.getTime())}
+							<button
+								class="mcell"
+								class:dim={cell.dim}
+								class:weekend={cell.weekend}
+								class:today={cell.isToday}
+								class:sel={cell.selected}
+								onclick={() => tapDay(cell)}
+								aria-pressed={cell.selected}
+								aria-label={`${cell.date.toLocaleDateString('en-GB', {
+									weekday: 'long',
+									day: 'numeric',
+									month: 'long'
+								})}${cell.events.length ? `, ${cell.events.length} event${cell.events.length === 1 ? '' : 's'}` : ''}`}
+							>
+								<span class="mnum" aria-hidden="true">{cell.num}</span>
+								{#if cell.events.length}
+									<span class="mchips" aria-hidden="true">
+										{#each cell.events.slice(0, 2) as ev (ev.id)}
+											{@const color = calById.get(ev.calendar)?.color ?? '#666b76'}
+											<span class="mdot" class:hollow={ev.allDay} style={`--c:${color}`}>
+												{ev.title}
+											</span>
+										{/each}
+										{#if cell.events.length > 2}<span class="mmore">+{cell.events.length - 2}</span>{/if}
+									</span>
+								{/if}
+							</button>
+						{/each}
+					</div>
+					{#if selectedDay}
+						<section class="daypanel" class:today={sameDay(selectedDay, today)} aria-label={selLong}>
+							<div class="dhead">
+								<h2>
+									<span class="dname">{selectedDay.toLocaleDateString('en-GB', { weekday: 'short' })}</span>
+									<span class="dnum">{selectedDay.getDate()}</span>
+									<span class="sr">{selLong}</span>
+								</h2>
+								<button
+									class="addday"
+									onclick={() => selectedDay && openAdd(new Date(selectedDay))}
+									aria-label={`Add event on ${selLong}`}
+									disabled={calendars.length === 0}
+								>
+									<Plus size={16} strokeWidth={2.5} />
+								</button>
+							</div>
+							{#if selEvents.length}
+								<ul class="chips">
+									{#each selEvents as ev (ev.id)}
+										{@const cal = calById.get(ev.calendar)}
+										{@const color = cal?.color ?? '#666b76'}
+										{@const time = chipTime(ev, selectedDay)}
+										<li
+											class="chip"
+											class:allday={ev.allDay}
+											style={ev.allDay
+												? `--c:${color}`
+												: `--c:${color};background:${color};color:${chipText(color)}`}
+											title={`${ev.title}${cal ? ` · ${cal.name}` : ''}`}
+										>
+											<button class="hit" onclick={() => sheet?.edit(ev)}>
+												{#if time}<span class="t">{time}</span>{/if}
+												<span class="n">{ev.title}</span>
+												<span class="sr">, {cal ? `${cal.name}, ` : ''}edit</span>
+											</button>
+										</li>
+									{/each}
+								</ul>
+							{:else if !weekLoading}
+								<p class="free">Free</p>
+							{/if}
+						</section>
+					{/if}
+				</div>
+			{/if}
 
 			{#if status === 'ready' && calendars.length === 0}
 				<p class="banner">
@@ -492,7 +740,7 @@
 	{/if}
 </main>
 
-<EventSheet bind:this={sheet} {calendars} onsaved={loadWeek} />
+<EventSheet bind:this={sheet} {calendars} onsaved={loadView} />
 <UpdatesSheet
 	bind:this={updatesSheet}
 	items={updates}
@@ -657,7 +905,55 @@
 		align-items: center;
 		gap: 6px;
 		flex-shrink: 0;
+	}
+
+	.ctl {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 8px;
 		margin-left: auto;
+	}
+
+	/* Week | Month: a standard segmented pill, active segment is ink. */
+	.modes {
+		display: flex;
+		border: 1px solid #c9ccd2;
+		border-radius: 999px;
+		background: #ffffff;
+		box-shadow: 0 1px 2px rgba(34, 37, 42, 0.08);
+		overflow: hidden;
+	}
+
+	.mode {
+		height: 40px;
+		padding: 0 16px;
+		border: none;
+		background: transparent;
+		font-size: 13px;
+		font-weight: 600;
+		color: #4c5260;
+		transition:
+			background-color 120ms ease-out,
+			color 120ms ease-out;
+	}
+
+	.mode + .mode {
+		border-left: 1px solid #e3e4e8;
+	}
+
+	.mode[aria-pressed='true'] {
+		background: #22252a;
+		color: #fbfaf4;
+	}
+
+	.mode:hover[aria-pressed='false'] {
+		background: #f6f2e9;
+	}
+
+	.mode:active {
+		transform: translateY(1px);
 	}
 
 	button {
@@ -767,6 +1063,14 @@
 		.spread {
 			grid-template-columns: repeat(4, minmax(0, 1fr));
 			gap: 10px;
+		}
+
+		.mgrid {
+			grid-template-rows: repeat(var(--rows), minmax(64px, 1fr));
+		}
+
+		.mgrid + .daypanel {
+			grid-column: 1 / -1;
 		}
 	}
 
@@ -1061,6 +1365,181 @@
 		color: #4c5260;
 	}
 
+	/* ---------- month ---------- */
+
+	.mpanel {
+		animation: settle 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+
+	@keyframes settle {
+		from {
+			opacity: 0.85;
+			transform: translateY(6px);
+		}
+		to {
+			opacity: 1;
+			transform: none;
+		}
+	}
+
+	.wdays {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(7, 1fr);
+		margin-bottom: 6px;
+	}
+
+	.wdays li {
+		font-family: 'Permanent Marker', cursive;
+		font-size: 13px;
+		line-height: 1;
+		text-align: center;
+		color: #22252a;
+	}
+
+	/* Month as one ruled sheet: the frame draws the box, the 1px gaps between
+	   cells (showing the sheet's own ground) draw the internal rules. */
+	.mgrid {
+		display: grid;
+		grid-template-columns: repeat(7, 1fr);
+		grid-template-rows: repeat(var(--rows), minmax(44px, 1fr));
+		gap: 1px;
+		border: 2px solid #22252a;
+		border-radius: 4px;
+		background: rgba(34, 37, 42, 0.22);
+		overflow: hidden;
+		min-height: calc(var(--rows) * 48px);
+	}
+
+	.mcell {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 3px;
+		padding: 4px 4px 3px;
+		min-width: 0;
+		border: none;
+		background: rgba(251, 250, 244, 0.92);
+		text-align: left;
+		transition: background-color 120ms ease-out;
+	}
+
+	.mcell:hover {
+		background: #f6f2e9;
+	}
+
+	.mcell.weekend {
+		background:
+			linear-gradient(rgba(208, 80, 64, 0.07), rgba(208, 80, 64, 0.07)),
+			rgba(251, 250, 244, 0.92);
+	}
+
+	.mcell.dim {
+		background: rgba(251, 250, 244, 0.55);
+	}
+
+	.mcell.dim .mnum,
+	.mcell.dim .mdot::before {
+		opacity: 0.4;
+	}
+
+	.mcell.dim .mdot,
+	.mcell.dim .mmore {
+		opacity: 0.55;
+	}
+
+	.mcell.sel {
+		outline: 2px solid #22252a;
+		outline-offset: -2px;
+	}
+
+	.mnum {
+		display: inline-block;
+		font-size: 12px;
+		line-height: 16px;
+		font-variant-numeric: tabular-nums;
+		padding: 0 3px;
+	}
+
+	.mcell.today .mnum {
+		color: #ffffff;
+		background: #c0392b;
+		font-weight: 700;
+		border-radius: 999px;
+		line-height: 16px;
+	}
+
+	.mchips {
+		width: 100%;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		overflow: hidden;
+	}
+
+	.mdot {
+		position: relative;
+		display: block;
+		max-width: 100%;
+		padding-left: 10px;
+		font-size: 11px;
+		font-weight: 700;
+		line-height: 15px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		color: #22252a;
+	}
+
+	.mdot::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 4px;
+		width: 6px;
+		height: 6px;
+		border-radius: 2px;
+		background: var(--c);
+	}
+
+	.mdot.hollow::before {
+		background: #fbfaf4;
+		box-shadow: inset 0 0 0 1.5px var(--c);
+	}
+
+	.mmore {
+		padding-left: 10px;
+		font-size: 11px;
+		font-weight: 600;
+		line-height: 15px;
+		color: #666b76;
+	}
+
+	/* The tapped day, unfolded below the sheet's rules. */
+	.daypanel {
+		margin-top: 8px;
+		border: 2px solid #22252a;
+		border-radius: 4px;
+		background: #ffffff;
+		padding: 5px 9px 10px;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		animation: settle 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+
+	.daypanel.today .dnum {
+		color: #ffffff;
+		background: #c0392b;
+		font-weight: 700;
+		border-radius: 999px;
+		padding: 1px 7px;
+	}
+
 	/* ---------- footer + add ---------- */
 
 	.foot {
@@ -1163,7 +1642,9 @@
 
 	@media (prefers-reduced-motion: reduce) {
 		.sheet.hang,
-		.chip.press {
+		.chip.press,
+		.mpanel,
+		.daypanel {
 			animation: none;
 		}
 
