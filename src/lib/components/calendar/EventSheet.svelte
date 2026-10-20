@@ -51,14 +51,6 @@
 
 	const isPrivate = $derived(calendars.find((c) => c.id === calendarId)?.visibility === 'private');
 
-	const repeatHint = $derived.by(() => {
-		const day = fromDateInput(date);
-		if (!repeat || !day) return '';
-		if (repeat === 'weekly')
-			return `Every ${day.toLocaleDateString('en-GB', { weekday: 'long' })} from now on.`;
-		return `On day ${day.getDate()} of each month from now on.`;
-	});
-
 	const endDayLabel = $derived.by(() => {
 		if (!spanDays) return '';
 		const day = fromDateInput(date);
@@ -290,12 +282,6 @@
 			<input bind:checked={usesCar} type="checkbox" role="switch" />
 			<span class="car"><Car size={18} strokeWidth={2} aria-hidden="true" />Needs the car</span>
 		</label>
-		{#if usesCar}
-			<p class="hint">
-				Books the car{allDay ? '' : ' from start to end'}{repeat ? ', every repeat' : ''}. Nobody
-				else can book it then.
-			</p>
-		{/if}
 
 		<fieldset class="cals">
 			<legend>Repeats</legend>
@@ -307,11 +293,6 @@
 					</label>
 				{/each}
 			</div>
-			{#if repeatHint}
-				<p class="hint">
-					{repeatHint}{editing && repeat ? ' Saving updates every repeat.' : ''}
-				</p>
-			{/if}
 		</fieldset>
 
 		<fieldset class="cals">
@@ -630,7 +611,8 @@
 		margin-left: -2px;
 	}
 
-	.hint.private {
+	/* In a fieldset there's no form gap to pull into; sit below the pills. */
+	.cals .hint {
 		margin-top: 8px;
 	}
 
