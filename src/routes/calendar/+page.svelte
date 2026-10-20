@@ -2,7 +2,16 @@
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { goto, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
-	import { Bell, ChevronLeft, ChevronRight, Car, Lock, Plus, Repeat } from '@lucide/svelte';
+	import {
+		Bell,
+		CalendarDays,
+		ChevronLeft,
+		ChevronRight,
+		Car,
+		Lock,
+		Plus,
+		Repeat
+	} from '@lucide/svelte';
 	import { pb } from '$lib/pocketbase';
 	import {
 		cachedCalendars,
@@ -20,6 +29,7 @@
 	} from '$lib/offline.svelte';
 	import EventSheet from '$lib/components/calendar/EventSheet.svelte';
 	import UpdatesSheet from '$lib/components/calendar/UpdatesSheet.svelte';
+	import CalendarsSheet from '$lib/components/calendar/CalendarsSheet.svelte';
 	import {
 		forgetPushOnSignOut,
 		loadNotifications,
@@ -75,6 +85,7 @@
 	let firstPaint = $state(true);
 	let sheet: ReturnType<typeof EventSheet> | undefined = $state();
 	let updatesSheet: ReturnType<typeof UpdatesSheet> | undefined = $state();
+	let calsSheet: ReturnType<typeof CalendarsSheet> | undefined = $state();
 	let updates: FamilyNotification[] = $state([]);
 	let updatesFailed = $state(false);
 	/** Event to briefly highlight after jumping to it from an update. */
@@ -370,6 +381,13 @@
 			.catch(() => {});
 	}
 
+	/** A calendar was added, renamed, recoloured or removed: repaint everything. */
+	async function reloadCalendars() {
+		if (!family) return;
+		calendars = await loadCalendars(family.id);
+		loadView();
+	}
+
 	async function pickUpdate(n: FamilyNotification) {
 		updatesSheet?.close();
 		const start = parseDate(n.eventStartsAt);
@@ -555,7 +573,11 @@
 		{:else}
 			<header class="top">
 				<div class="titlerow">
-					<h1 class="fam">{family?.name ?? 'Hearth'}</h1>
+				<h1 class="fam">{family?.name ?? 'Hearth'}</h1>
+				<div class="titlebtns">
+					<button class="round cals" onclick={() => calsSheet?.open()} aria-label="Calendars">
+						<CalendarDays size={20} strokeWidth={2.25} />
+					</button>
 					<button
 						class="round bell"
 						onclick={openUpdates}
@@ -566,6 +588,7 @@
 							<span class="badge" aria-hidden="true">{unread > 9 ? '9+' : unread}</span>
 						{/if}
 					</button>
+				</div>
 				</div>
 				<div class="bar">
 					<p class="range">
@@ -850,6 +873,12 @@
 </main>
 
 <EventSheet bind:this={sheet} {calendars} familyId={family?.id ?? ''} onsaved={loadView} />
+<CalendarsSheet
+	bind:this={calsSheet}
+	{calendars}
+	familyId={family?.id ?? ''}
+	onchanged={reloadCalendars}
+/>
 <UpdatesSheet
 	bind:this={updatesSheet}
 	items={updates}
@@ -936,10 +965,18 @@
 		min-width: 0;
 	}
 
-	.bell {
+	.bell,
+	.cals {
 		position: relative;
 		flex-shrink: 0;
 		margin-top: 2px;
+	}
+
+	.titlebtns {
+		display: flex;
+		flex-shrink: 0;
+		align-items: flex-start;
+		gap: 10px;
 	}
 
 	.badge {
