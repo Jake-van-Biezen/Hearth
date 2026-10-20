@@ -2,6 +2,7 @@
 	import './layout.css';
 	import { onMount } from 'svelte';
 	import { pwaInfo } from 'virtual:pwa-info';
+	import { Toaster } from '$lib/components/ui/sonner';
 	import favicon from '$lib/assets/favicon.svg';
 
 	let { children } = $props();
@@ -21,3 +22,4 @@
 	<meta name="theme-color" content="#fbfaf4" />
 </svelte:head>
 {@render children()}
+<Toaster offset={{ bottom: 'calc(88px + env(safe-area-inset-bottom))' }} />

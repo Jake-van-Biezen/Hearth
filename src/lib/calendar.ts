@@ -1,6 +1,18 @@
 import type { RecordModel } from 'pocketbase';
 import { pb } from '$lib/pocketbase';
 import {
+	cachedCalendars,
+	cachedFamily,
+	cachedNextUp,
+	cachedWindowEvents,
+	isNetError,
+	noteOffline,
+	noteOnline,
+	saveCachedCalendars,
+	saveCachedFamily,
+	saveEvents
+} from './offline.svelte';
+import {
 	expandRecurring,
 	parseDate,
 	seriesNext,
@@ -139,19 +151,40 @@ export function sortForDay(a: CalendarEvent, b: CalendarEvent): number {
 }
 
 export async function loadFamily(userId: string): Promise<Family | null> {
-	const list = await pb.collection('families').getList<Family>(1, 1, {
-		filter: pb.filter('members.id ?= {:uid}', { uid: userId }),
-		sort: 'name'
-	});
-	return list.items[0] ?? null;
+	try {
+		const list = await pb.collection('families').getList<Family>(1, 1, {
+			filter: pb.filter('members.id ?= {:uid}', { uid: userId }),
+			sort: 'name'
+		});
+		noteOnline();
+		const family = list.items[0] ?? null;
+		if (family) saveCachedFamily(userId, family);
+		return family;
+	} catch (err) {
+		if (!isNetError(err)) throw err;
+		noteOffline();
+		return cachedFamily(userId);
+	}
 }
 
 export function loadCalendars(familyId: string): Promise<Calendar[]> {
-	return pb.collection('calendars').getFullList<Calendar>({
-		filter: pb.filter('family = {:fid}', { fid: familyId }),
-		// Shared calendars first ("family" < "private"), then your own.
-		sort: 'visibility,name'
-	});
+	return pb
+		.collection('calendars')
+		.getFullList<Calendar>({
+			filter: pb.filter('family = {:fid}', { fid: familyId }),
+			// Shared calendars first ("family" < "private"), then your own.
+			sort: 'visibility,name'
+		})
+		.then((cals) => {
+			noteOnline();
+			saveCachedCalendars(familyId, cals);
+			return cals;
+		})
+		.catch((err) => {
+			if (!isNetError(err)) throw err;
+			noteOffline();
+			return cachedCalendars(familyId);
+		});
 }
 
 /** Whole days of the local month containing `d`. */
@@ -165,25 +198,43 @@ export function formatMonthRange(first: Date): string {
 	return new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(first);
 }
 
+const WINDOW_FILTER =
+	'calendar.family = {:fid} && startsAt < {:end} && (startsAt >= {:start} || endsAt > {:start} || (recurrence != "" && startsAt < {:start}))';
+
 /**
  * All events touching [weekStart, +7d), with recurring series expanded to
  * their occurrences in that window (the base of an ongoing series may sit
- * below the window; expansion is client-side).
+ * below the window; expansion is client-side). Falls back to the offline
+ * cache when the home server is unreachable.
  */
 export async function loadWeekEvents(
 	familyId: string,
 	weekStart: Date
 ): Promise<CalendarEvent[]> {
 	const end = addDays(weekStart, 7);
-	const evs = await pb.collection('events').getFullList<CalendarEvent>({
-		filter: pb.filter(
-			'calendar.family = {:fid} && startsAt < {:end} && (startsAt >= {:start} || endsAt > {:start} || (recurrence != "" && startsAt < {:start}))',
-			{ fid: familyId, start: weekStart, end }
-		),
-		sort: 'startsAt',
-		requestKey: 'hearth-week'
-	});
-	return expandRecurring(evs, weekStart, end);
+	try {
+		const evs = await pb.collection('events').getFullList<CalendarEvent>({
+			filter: pb.filter(WINDOW_FILTER, { fid: familyId, start: weekStart, end }),
+			sort: 'startsAt',
+			requestKey: 'hearth-week'
+		});
+		noteOnline();
+		saveEvents(familyId, evs);
+		return expandRecurring(evs, weekStart, end);
+	} catch (err) {
+		if (!isNetError(err)) throw err;
+		noteOffline();
+		return expandRecurring(cachedWindowEvents(familyId, weekStart, end), weekStart, end);
+	}
+}
+
+/**
+ * Instant paint: what the offline cache holds for [start, end), expanded.
+ * Callers show this while the network request is still in flight, so a slow
+ * or hanging connection never leaves the calendar blank.
+ */
+export function cachedRangeEvents(familyId: string, start: Date, end: Date): CalendarEvent[] {
+	return expandRecurring(cachedWindowEvents(familyId, start, end), start, end);
 }
 
 /** See loadWeekEvents; `end` is exclusive. */
@@ -193,14 +244,46 @@ export function loadRangeEvents(
 	end: Date,
 	requestKey: string
 ): Promise<CalendarEvent[]> {
-	return pb.collection('events').getFullList<CalendarEvent>({
-		filter: pb.filter(
-			'calendar.family = {:fid} && startsAt < {:end} && (startsAt >= {:start} || endsAt > {:start} || (recurrence != "" && startsAt < {:start}))',
-			{ fid: familyId, start, end }
-		),
-		sort: 'startsAt',
-		requestKey
-	}).then((evs) => expandRecurring(evs, start, end));
+	return pb.collection('events')
+		.getFullList<CalendarEvent>({
+			filter: pb.filter(WINDOW_FILTER, { fid: familyId, start, end }),
+			sort: 'startsAt',
+			requestKey
+		})
+		.then((evs) => {
+			noteOnline();
+			saveEvents(familyId, evs);
+			return expandRecurring(evs, start, end);
+		})
+		.catch((err) => {
+			if (!isNetError(err)) throw err;
+			noteOffline();
+			return expandRecurring(cachedWindowEvents(familyId, start, end), start, end);
+		});
+}
+
+/**
+ * Background fetch of a wide window around today, so the offline cache has
+ * something to show for the coming months even if nobody browses them. Best
+ * effort only.
+ */
+export async function primeOfflineCache(familyId: string): Promise<void> {
+	try {
+		const today = startOfDay(new Date());
+		const from = addDays(today, -35);
+		const to = addDays(today, 120);
+		const evs = await pb.collection('events').getFullList<CalendarEvent>({
+			filter: pb.filter('calendar.family = {:fid} && startsAt >= {:start} && startsAt < {:end}', {
+				fid: familyId,
+				start: from,
+				end: to
+			}),
+			requestKey: 'hearth-prime'
+		});
+		saveEvents(familyId, evs);
+	} catch {
+		// Whatever the user browsed before is already cached.
+	}
 }
 
 /**
@@ -210,31 +293,39 @@ export function loadRangeEvents(
  */
 export async function loadNextUp(familyId: string, now: Date): Promise<CalendarEvent | null> {
 	const base = 'calendar.family = {:fid} && allDay = false';
-	const [plain, series] = await Promise.all([
-		pb.collection('events').getList<CalendarEvent>(1, 1, {
-			filter: pb.filter(`${base} && startsAt >= {:now}`, { fid: familyId, now }),
-			sort: 'startsAt',
-			requestKey: 'hearth-next-plain'
-		}),
-		pb.collection('events').getFullList<CalendarEvent>({
-			filter: pb.filter(`${base} && recurrence != "" && startsAt < {:now}`, {
-				fid: familyId,
-				now
+	try {
+		const [plain, series] = await Promise.all([
+			pb.collection('events').getList<CalendarEvent>(1, 1, {
+				filter: pb.filter(`${base} && startsAt >= {:now}`, { fid: familyId, now }),
+				sort: 'startsAt',
+				requestKey: 'hearth-next-plain'
 			}),
-			sort: '-startsAt',
-			requestKey: 'hearth-next-series'
-		})
-	]);
-	let best: CalendarEvent | null = plain.items[0] ?? null;
-	let bestAt = best ? parseDate(best.startsAt)?.getTime() ?? Infinity : Infinity;
-	for (const ev of series) {
-		const occ = seriesNext(ev, now);
-		if (!occ) continue;
-		const at = occ.getTime();
-		if (at < bestAt) {
-			best = { ...ev, startsAt: occ.toISOString() };
-			bestAt = at;
+			pb.collection('events').getFullList<CalendarEvent>({
+				filter: pb.filter(`${base} && recurrence != "" && startsAt < {:now}`, {
+					fid: familyId,
+					now
+				}),
+				sort: '-startsAt',
+				requestKey: 'hearth-next-series'
+			})
+		]);
+		noteOnline();
+		saveEvents(familyId, [...plain.items, ...series]);
+		let best: CalendarEvent | null = plain.items[0] ?? null;
+		let bestAt = best ? parseDate(best.startsAt)?.getTime() ?? Infinity : Infinity;
+		for (const ev of series) {
+			const occ = seriesNext(ev, now);
+			if (!occ) continue;
+			const at = occ.getTime();
+			if (at < bestAt) {
+				best = { ...ev, startsAt: occ.toISOString() };
+				bestAt = at;
+			}
 		}
+		return best;
+	} catch (err) {
+		if (!isNetError(err)) throw err;
+		noteOffline();
+		return cachedNextUp(familyId, now);
 	}
-	return best;
 }

@@ -1,9 +1,22 @@
 <script lang="ts">
-	import { onDestroy, onMount, tick } from 'svelte';
+	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { goto, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Bell, ChevronLeft, ChevronRight, Car, Lock, Plus, Repeat } from '@lucide/svelte';
 	import { pb } from '$lib/pocketbase';
+	import {
+		cachedCalendars,
+		cachedNextUp,
+		cachedFamily,
+		clearCachedData,
+		isNetError,
+		noteOffline,
+		offline,
+		nudge,
+		onRestore,
+		setUser,
+		startSync
+	} from '$lib/offline.svelte';
 	import EventSheet from '$lib/components/calendar/EventSheet.svelte';
 	import UpdatesSheet from '$lib/components/calendar/UpdatesSheet.svelte';
 	import {
@@ -16,6 +29,7 @@
 	} from '$lib/notifications';
 	import {
 		addDays,
+		cachedRangeEvents,
 		chipText,
 		daysBetween,
 		formatMonthRange,
@@ -31,6 +45,7 @@
 		monthBounds,
 		onDay,
 		parseDate,
+		primeOfflineCache,
 		sameDay,
 		sortForDay,
 		startOfDay,
@@ -157,6 +172,10 @@
 		const ws = weekStart;
 		weekLoading = true;
 		weekError = false;
+		// Paint from the cache while the server answers (it may never, offline).
+		const seen = cachedRangeEvents(fid, ws, addDays(ws, 7));
+		if (seen.length) events = seen;
+		if (!nextUp) nextUp = cachedNextUp(fid, new Date());
 		try {
 			const [evs, next] = await Promise.all([
 				loadWeekEvents(fid, ws),
@@ -180,8 +199,10 @@
 		const gs = mGridStart;
 		weekLoading = true;
 		weekError = false;
+		const end = addDays(gs, mWeeks * 7);
+		const seen = cachedRangeEvents(fid, gs, end);
+		if (seen.length) monthEvents = seen;
 		try {
-			const end = addDays(gs, mWeeks * 7);
 			const evs = await loadRangeEvents(fid, gs, end, 'hearth-month');
 			if (gs !== mGridStart) return;
 			monthEvents = evs;
@@ -200,7 +221,7 @@
 
 	async function loadUpdates() {
 		try {
-			updates = await loadNotifications();
+			updates = await loadNotifications(pb.authStore.record?.id ?? '');
 			updatesFailed = false;
 		} catch (e) {
 			if ((e as { isAbort?: boolean }).isAbort) return;
@@ -251,36 +272,72 @@
 		status = 'loading';
 		const uid = pb.authStore.record?.id;
 		if (!uid) return goto('/', { replaceState: true });
+		startSync();
+		if (page.url.search) {
+			applyLink(page.url.searchParams);
+			replaceState('/calendar', {});
+		}
+		if (view === 'week' && new URLSearchParams(window.location.search).get('v') === 'month') {
+			view = 'month';
+			replaceState('/calendar?v=month', {});
+		}
+		// Open straight from the offline cache when there is one: the calendar
+		// shows at once, and the network (which may be slow or gone) only
+		// refreshes it afterwards.
+		const warm = cachedFamily(uid);
+		if (warm) {
+			family = warm;
+			calendars = cachedCalendars(warm.id);
+			status = 'ready';
+			loadView();
+		}
 		try {
 			family = await loadFamily(uid);
-			if (!family) {
-				status = 'no-family';
+		} catch (err) {
+			if ((err as { status?: number }).status === 401) return signOut();
+			if (!isNetError(err)) {
+				status = 'error';
 				return;
 			}
-			calendars = await loadCalendars(family.id);
-			status = 'ready';
-			if (page.url.search) {
-				applyLink(page.url.searchParams);
-				replaceState('/calendar', {});
+			noteOffline();
+			family = cachedFamily(uid);
+			if (!family) {
+				status = 'offline';
+				return;
 			}
-			if (view === 'week' && new URLSearchParams(window.location.search).get('v') === 'month') {
-				view = 'month';
-				replaceState('/calendar?v=month', {});
-			}
-			await Promise.all([loadView(), loadUpdates()]);
-			revealFlash();
-			subscribe();
-			syncPush();
-		} catch (e) {
-			const code = (e as { status?: number }).status ?? 0;
-			if (code === 401) return signOut();
-			status = code === 0 ? 'offline' : 'error';
 		}
+		if (!family) {
+			status = 'no-family';
+			return;
+		}
+		setUser(uid);
+		try {
+			calendars = await loadCalendars(family.id);
+		} catch (err) {
+			if (!isNetError(err)) {
+				status = 'error';
+				return;
+			}
+			noteOffline();
+			calendars = cachedCalendars(family.id);
+		}
+		status = 'ready';
+		await Promise.all([loadView(), loadUpdates()]);
+		revealFlash();
+		subscribe();
+		syncPush();
+		if (!stopRestore) stopRestore = onRestore(() => {
+			subscribe();
+			loadView();
+			loadUpdates();
+		});
+		void primeOfflineCache(family.id);
 	}
 
 	let unsubscribe: (() => void) | null = null;
+	let stopRestore: (() => void) | null = null;
 	async function subscribe() {
-		if (unsubscribe) return;
+		if (unsubscribe || !offline.online) return;
 		try {
 			const offEvents = await pb.collection('events').subscribe('*', () => loadView());
 			const offCals = await pb.collection('calendars').subscribe('*', async () => {
@@ -402,8 +459,12 @@
 	async function signOut() {
 		unsubscribe?.();
 		unsubscribe = null;
+		stopRestore?.();
+		stopRestore = null;
+		const uid = pb.authStore.record?.id;
 		if (pb.authStore.isValid) await forgetPushOnSignOut();
 		pb.authStore.clear();
+		clearCachedData(uid ?? '', family?.id);
 		goto('/', { replaceState: true });
 	}
 
@@ -424,11 +485,13 @@
 			goto('/', { replaceState: true });
 			return;
 		}
-		boot();
+		// boot() reads and writes plenty of state; only sign-in state may re-run it.
+		untrack(boot);
 	});
 
 	onDestroy(() => {
 		unsubscribe?.();
+		stopRestore?.();
 		clearTimeout(flashTimer);
 	});
 </script>
@@ -539,6 +602,34 @@
 				</div>
 			</header>
 
+			{#if offline.syncing || !offline.online || offline.queued}
+				<p class="banner sync" role="status">
+					{#if offline.syncing}
+						Sending saved changes&hellip;
+					{:else if !offline.online}
+						Offline &mdash; showing the last saved calendar.
+						{#if offline.queued}
+							{offline.queued === 1 ? '1 change' : `${offline.queued} changes`}
+							will send when connection returns.
+							<button class="link" onclick={() => void nudge()}>Try now</button>
+						{:else}
+							Changes you make are saved on this device first, then sent when connection
+							returns.
+						{/if}
+					{:else}
+						{offline.queued === 1 ? 'One' : offline.queued}
+						saved {offline.queued === 1 ? 'change' : 'changes'} waiting to send&hellip;
+					{/if}
+				</p>
+			{/if}
+
+			{#if offline.failed}
+				<p class="banner sync failed" role="alert">
+					{offline.failed}
+					<button class="link" onclick={() => (offline.failed = '')}>Dismiss</button>
+				</p>
+			{/if}
+
 			{#if weekError}
 				<p class="banner" role="alert">
 					Couldn't load {view === 'week' ? 'this week' : 'this month'} from the home server.
@@ -592,7 +683,12 @@
 											{#if ev.usesCar}<Car size={11} strokeWidth={2.5} class="rec" aria-hidden="true" />{/if}{#if ev.recurrence}<Repeat size={11} strokeWidth={2.5} class="rec" aria-hidden="true" />{/if}
 											{#if time}<span class="t">{time}</span>{/if}
 											<span class="n">{ev.title}</span>
-											<span class="sr">, {ev.usesCar ? 'needs the car, ' : ''}{cal ? `${cal.name}, ` : ''}edit</span>
+											<span class="sr"
+												>, {ev.usesCar ? 'needs the car, ' : ''}{cal ? `${cal.name}, ` : ''}{ev
+													.createdBy === pb.authStore.record?.id
+													? 'edit'
+													: 'details'}</span
+											>
 										</button>
 									</li>
 								{/each}
@@ -692,9 +788,14 @@
 										>
 											<button class="hit" onclick={() => sheet?.edit(ev)}>
 												{#if ev.usesCar}<Car size={11} strokeWidth={2.5} class="rec" aria-hidden="true" />{/if}{#if ev.recurrence}<Repeat size={11} strokeWidth={2.5} class="rec" aria-hidden="true" />{/if}
-												{#if time}<span class="t">{time}</span>{/if}
-												<span class="n">{ev.title}</span>
-												<span class="sr">, {ev.usesCar ? 'needs the car, ' : ''}{cal ? `${cal.name}, ` : ''}edit</span>
+											{#if time}<span class="t">{time}</span>{/if}
+											<span class="n">{ev.title}</span>
+											<span class="sr"
+												>, {ev.usesCar ? 'needs the car, ' : ''}{cal ? `${cal.name}, ` : ''}{ev
+													.createdBy === pb.authStore.record?.id
+													? 'edit'
+													: 'details'}</span
+											>
 											</button>
 										</li>
 									{/each}
@@ -742,7 +843,7 @@
 	{/if}
 </main>
 
-<EventSheet bind:this={sheet} {calendars} onsaved={loadView} />
+<EventSheet bind:this={sheet} {calendars} familyId={family?.id ?? ''} onsaved={loadView} />
 <UpdatesSheet
 	bind:this={updatesSheet}
 	items={updates}
@@ -1041,6 +1142,21 @@
 	.banner .link {
 		color: #a03427;
 		min-height: 0;
+	}
+
+	/* Offline strip: neutral while things are merely waiting, red on failure. */
+	.banner.sync {
+		color: #4c5260;
+	}
+
+	.banner.sync.failed {
+		color: #a03427;
+	}
+
+	.banner.sync .link {
+		color: inherit;
+		min-height: 0;
+		font-weight: 600;
 	}
 
 	/* ---------- spread ---------- */

@@ -39,6 +39,10 @@ export default defineConfig({
 			},
 			workbox: {
 				globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+				// SvelteKit's start script imports /_app/env.js at boot. adapter-static
+				// writes it after the precache glob runs, so list it by hand or the app
+				// shell can't start offline (blank page).
+				additionalManifestEntries: [{ url: '_app/env.js', revision: String(Date.now()) }],
 				// Web Push + notification click handlers (static/push-sw.js).
 				importScripts: ['push-sw.js'],
 				// PocketBase owns these: API (incl. the OAuth2 redirect popup) and admin UI.

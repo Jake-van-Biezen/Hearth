@@ -1,6 +1,16 @@
 <script lang="ts">
 	import { Car, Lock, X } from '@lucide/svelte';
+	import { toast } from 'svelte-sonner';
 	import { pb } from '$lib/pocketbase';
+	import {
+		deleteEvent,
+		exceptOccurrence,
+		saveNewEvent,
+		serverOrCachedEvent,
+		splitOccurrence,
+		updateEvent,
+		type SaveResult
+	} from '$lib/offline.svelte';
 	import {
 		amsDateKey,
 		addDays,
@@ -18,9 +28,11 @@
 
 	let {
 		calendars,
+		familyId,
 		onsaved
 	}: {
 		calendars: Calendar[];
+		familyId: string;
 		onsaved: () => void;
 	} = $props();
 
@@ -55,6 +67,11 @@
 	let error = $state('');
 
 	const isPrivate = $derived(calendars.find((c) => c.id === calendarId)?.visibility === 'private');
+	/** The server only lets an event's creator edit or delete it. */
+	const canManage = $derived.by(() => {
+		if (!editing) return true;
+		return editing.createdBy === pb.authStore.record?.id;
+	});
 
 	const endDayLabel = $derived.by(() => {
 		if (!spanDays) return '';
@@ -135,15 +152,28 @@
 		return "The home server didn't accept this. Try again, or check you're still in the family.";
 	}
 
+	/** Tell the user the change landed (now, or on this phone till the NAS answers). */
+	function announce(result: SaveResult, message: string) {
+		if (result === 'queued') {
+			toast.success(`${message} Saved on this phone; it sends when connection returns.`);
+		} else {
+			toast.success(message);
+		}
+	}
+
 	/**
 	 * Add or remove the tapped day from the series' exceptions. Removing
 	 * restores the regular occurrence; adding covers it over.
 	 */
-	async function toggleOccurrence(id: string, key: string, drop: boolean): Promise<void> {
-		const base = await pb.collection('events').getOne<CalendarEvent>(id);
+	async function toggleOccurrence(id: string, key: string, drop: boolean): Promise<SaveResult> {
+		if (drop) {
+			return await exceptOccurrence(familyId, id, key);
+		}
+		const base = await serverOrCachedEvent(id, familyId);
+		if (!base) return 'sent';
 		const others = (base.exceptions ?? []).filter((x) => x.d !== key);
-		const exceptions: EventException[] = drop ? others : [...others, { d: key }];
-		await pb.collection('events').update(base.id, { exceptions });
+		const exceptions: EventException[] = [...others, { d: key }];
+		return await updateEvent(familyId, base.id, { exceptions });
 	}
 
 	async function remove() {
@@ -155,11 +185,14 @@
 		error = '';
 		busy = true;
 		try {
+			let result: SaveResult = 'sent';
 			if (editing.recurrence && scope === 'one') {
 				const key = amsDateKey(parseDate(editing.startsAt) ?? new Date());
-				await toggleOccurrence(editing.id, key, true);
+				result = await toggleOccurrence(editing.id, key, true);
+				announce(result, `Removed that day's "${editing.title}".`);
 			} else {
-				await pb.collection('events').delete(editing.id);
+				result = await deleteEvent(familyId, editing.id);
+				announce(result, `"${editing.title}" deleted.`);
 			}
 			close();
 			onsaved();
@@ -226,49 +259,47 @@
 			usesCar
 		};
 		try {
+			let result: SaveResult = 'sent';
 			if (editing) {
 				if (editing.recurrence && scope === 'one') {
 					// Split: the series skips this day and a standalone event
-					// takes its slot. Batched so the family never sees both
-					// (or neither) for long; base first so a car booking in
-					// the edited slot doesn't clash with the series itself.
+					// takes its slot. The op itself merges the exception and
+					// creates the split server-side (batched so the family
+					// never sees both, or neither, for long).
 					const key = amsDateKey(parseDate(editing.startsAt) ?? new Date());
-					const base = await pb.collection('events').getOne<CalendarEvent>(editing.id);
-					const others = (base.exceptions ?? []).filter((x) => x.d !== key);
-					const batch = pb.createBatch();
-					batch
-						.collection('events')
-						.update(base.id, { exceptions: [...others, { d: key }] });
-					batch.collection('events').create({
+					result = await splitOccurrence(familyId, editing.id, key, {
 						...data,
 						recurrence: '',
-						occurrenceOf: base.id,
-						originDate: key,
 						createdBy: pb.authStore.record?.id ?? ''
 					});
-					await batch.send();
 				} else if (editing.recurrence) {
 					// All repeats: move the series anchor onto the edited day
 					// (nearest match to its current rhythm) and apply the
 					// edited fields to every occurrence.
-					const base = await pb.collection('events').getOne<CalendarEvent>(editing.id);
+					const base = await serverOrCachedEvent(editing.id, familyId);
+					if (!base) {
+						error = 'This event is gone. Someone may have deleted it already.';
+						return;
+					}
 					const baseStart = parseDate(base.startsAt) ?? new Date();
 					const anchor = rebaseSeriesAnchor(baseStart, startsAt, repeat);
 					const held = endsAt ? endsAt.getTime() - startsAt.getTime() : 0;
-					await pb.collection('events').update(base.id, {
+					result = await updateEvent(familyId, editing.id, {
 						...data,
 						startsAt: anchor.toISOString(),
 						endsAt: endsAt ? new Date(anchor.getTime() + held).toISOString() : ''
 					});
 				} else {
-					await pb.collection('events').update(editing.id, data);
+					result = await updateEvent(familyId, editing.id, data);
 				}
 			} else {
-				await pb
-					.collection('events')
-					.create({ ...data, createdBy: pb.authStore.record?.id ?? '' });
+				result = await saveNewEvent(familyId, {
+					...data,
+					createdBy: pb.authStore.record?.id ?? ''
+				});
 				localStorage.setItem(LAST_CAL_KEY, calendarId);
 			}
+			announce(result, `"${name}" saved.`);
 			close();
 			onsaved();
 		} catch (err) {
@@ -289,12 +320,19 @@
 >
 	<form onsubmit={save} novalidate>
 		<div class="head">
-			<h2 id="add-title">{editing ? 'Edit event' : 'New event'}</h2>
+			<h2 id="add-title">
+				{#if !editing}New event{:else if canManage}Edit event{:else}Event{/if}
+			</h2>
 			<button type="button" class="icon" onclick={close} aria-label="Close">
 				<X size={20} strokeWidth={2} />
 			</button>
 		</div>
 
+		{#if editing && !canManage}
+			<p class="readonly">Only the person who added this event can change it.</p>
+		{/if}
+
+		<fieldset class="fields" disabled={!canManage}>
 		<label class="field">
 			<span>What</span>
 			<input
@@ -393,32 +431,37 @@
 				<p class="hint private">Only you can see events on this calendar.</p>
 			{/if}
 		</fieldset>
+		</fieldset>
 
 		{#if error}
 			<p class="error" role="alert">{error}</p>
 		{/if}
 
 		<div class="actions">
-			{#if editing}
-				<button
-					type="button"
-					class="danger"
-					class:armed={confirmDelete}
-					onclick={remove}
-					disabled={busy}
-				>
-					{confirmDelete
-						? 'Tap again to delete'
-						: editing?.recurrence && scope === 'one'
-							? 'Delete this one'
-							: 'Delete'}
-				</button>
+			{#if editing && !canManage}
+				<button type="button" class="primary" onclick={close}>Close</button>
 			{:else}
-				<button type="button" class="ghost" onclick={close}>Cancel</button>
+				{#if editing}
+					<button
+						type="button"
+						class="danger"
+						class:armed={confirmDelete}
+						onclick={remove}
+						disabled={busy}
+					>
+						{confirmDelete
+							? 'Tap again to delete'
+							: editing?.recurrence && scope === 'one'
+								? 'Delete this one'
+								: 'Delete'}
+					</button>
+				{:else}
+					<button type="button" class="ghost" onclick={close}>Cancel</button>
+				{/if}
+				<button type="submit" class="primary" disabled={busy}>
+					{busy ? 'Saving…' : editing ? 'Save changes' : 'Save event'}
+				</button>
 			{/if}
-			<button type="submit" class="primary" disabled={busy}>
-				{busy ? 'Saving…' : editing ? 'Save changes' : 'Save event'}
-			</button>
 		</div>
 	</form>
 </dialog>
@@ -621,6 +664,19 @@
 		border: none;
 		padding: 0;
 		margin: 0;
+	}
+
+	/* Fieldset wrapper keeps every control disabled for view-only access. */
+	.fields {
+		border: none;
+		padding: 0;
+		margin: 0;
+		min-width: 0;
+	}
+
+	.readonly {
+		font-size: 14px;
+		color: #4c5260;
 	}
 
 	legend {

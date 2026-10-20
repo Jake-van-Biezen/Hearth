@@ -188,6 +188,14 @@ Failure that names the problem and the recovery in product language.
 - **Copy:** error-red at 14px on paper, `role="alert"`, max-width 340px
 - **Position:** between week panel and action, 18px down
 
+### Toast (Sonner)
+Confirmation a change landed — success voice only; failures stay inline in the sheet where they were made.
+- **Surface:** white sheet `#ffffff`, ink text, 1px button-border `#c9ccd2`, 8px radius, sheet-lift shadow (one notch lighter)
+- **Type:** Karla 15px, control weight in the title; description ink-soft
+- **Icons:** drawn lucide glyphs, not emoji — success event-green, error error-red, busy ink-soft spinner
+- **Position:** bottom-center, above the Add pill and safe area; stacked, auto-dismissing
+- **Substance:** the copy names the outcome in product language ("Dentist" saved. / "Dentist" deleted.) and, when offline, says it sends when connection returns — no icon-only, no vague "Success"
+
 ## Do's and Don'ts
 
 ### Do:

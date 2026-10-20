@@ -31,6 +31,7 @@ pnpm build       # production build (PWA service worker generated)
 - Calendars: `visibility = "private"` + `owner` → only the owner sees the calendar and its events (enforced in API rules, so realtime too). Shared calendars have no owner
 - `deploy/push/` — Node sidecar (`hearth-push`): watches `notifications`, sends Web Push (VAPID) to `push_subscriptions`, stamps `pushedAt`, prunes 404/410 subs. Env in `deploy/.env.example`
 - Service worker push/click handlers: `static/push-sw.js` (pulled in via `workbox.importScripts`)
+- Offline: reads fall back to a localStorage cache (`src/lib/offline.svelte.ts`; boot and week/month loads paint from it first, then refresh), writes queue and flush on reconnect. `pb.beforeSend` adds a 10s request timeout so a hanging network counts as offline. The SW must precache `_app/env.js` (`additionalManifestEntries` in `vite.config.ts`) or the shell won't start offline
 - Dev frontend points at `PUBLIC_POCKETBASE_URL` (copy `.env.example` → `.env`)
 
 ## Design

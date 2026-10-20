@@ -1,6 +1,15 @@
 import type { RecordModel } from 'pocketbase';
 import { pb } from '$lib/pocketbase';
 import { parseDate, formatTime } from '$lib/calendar';
+import {
+	cachedUpdates,
+	isNetError,
+	noteOffline,
+	noteOnline,
+	readAllNotifications,
+	readNotification,
+	saveCachedUpdates
+} from './offline.svelte';
 
 export type FamilyNotification = RecordModel & {
 	recipient: string;
@@ -54,19 +63,31 @@ export function ago(value: string, now = new Date()): string {
 	return dayFmt.format(d);
 }
 
-export function loadNotifications(limit = 40): Promise<FamilyNotification[]> {
-	return pb
-		.collection('notifications')
-		.getList<FamilyNotification>(1, limit, { sort: '-created', requestKey: 'hearth-notifs' })
-		.then((r) => r.items);
+export async function loadNotifications(
+	uid: string,
+	limit = 40
+): Promise<FamilyNotification[]> {
+	try {
+		const items = await pb
+			.collection('notifications')
+			.getList<FamilyNotification>(1, limit, { sort: '-created', requestKey: 'hearth-notifs' })
+			.then((r) => r.items);
+		noteOnline();
+		saveCachedUpdates(uid, items);
+		return items;
+	} catch (err) {
+		if (!isNetError(err)) throw err;
+		noteOffline();
+		return cachedUpdates(uid);
+	}
 }
 
 export function markRead(id: string): Promise<unknown> {
-	return pb.collection('notifications').update(id, { readAt: new Date().toISOString() });
+	return readNotification(id, new Date().toISOString());
 }
 
 export function markAllRead(): Promise<unknown> {
-	return pb.send('/api/hearth/notifications/read-all', { method: 'POST' });
+	return readAllNotifications(new Date().toISOString());
 }
 
 // ------------------------------------------------------------------ push --
