@@ -48,9 +48,22 @@ function shapeOf(record) {
 		createdBy: record.getString('createdBy'),
 		allDay: allDay,
 		recurrence: record.getString('recurrence'),
+		// Amsterdam date keys of occurrences the series no longer covers.
+		excepts: exceptsOf(record),
 		start: start,
 		duration: stop.getTime() - start.getTime()
 	};
+}
+
+/** Set of "YYYY-MM-DD" Amsterdam keys in the record's `exceptions` JSON. */
+function exceptsOf(record) {
+	const list = require(`${__hooks}/exceptions.js`).jsonList(record.get('exceptions'));
+	const set = {};
+	for (let i = 0; i < list.length; i++) {
+		const x = list[i];
+		if (x && typeof x.d === 'string') set[x.d] = true;
+	}
+	return set;
 }
 
 // ------------------------------------------------- Europe/Amsterdam time --
@@ -92,6 +105,12 @@ function shift(base, days, months) {
 	);
 }
 
+/** YYYY-MM-DD of `d`'s Amsterdam calendar day. */
+function amsKey(d) {
+	const w = wall(d);
+	return w.getUTCFullYear() + '-' + pad(w.getUTCMonth() + 1) + '-' + pad(w.getUTCDate());
+}
+
 /** Occurrence start times of `ev` whose interval overlaps [from, to). */
 function occurrences(ev, from, to) {
 	const out = [];
@@ -105,6 +124,8 @@ function occurrences(ev, from, to) {
 		for (let k = k0; k < k0 + MAX_STEPS; k++) {
 			const s = shift(ev.start, 7 * k, 0);
 			if (s.getTime() >= hi) break;
+			// Split-off (or deleted) days no longer belong to the series.
+			if (ev.excepts && ev.excepts[amsKey(s)]) continue;
 			keep(s);
 		}
 	} else if (ev.recurrence === 'monthly') {
@@ -118,6 +139,7 @@ function occurrences(ev, from, to) {
 			if (s.getTime() >= hi) break;
 			// Rolled over (Feb 31 -> Mar 3): no such date that month.
 			if (wall(s).getUTCDate() !== base.getUTCDate()) continue;
+			if (ev.excepts && ev.excepts[amsKey(s)]) continue;
 			keep(s);
 		}
 	} else {

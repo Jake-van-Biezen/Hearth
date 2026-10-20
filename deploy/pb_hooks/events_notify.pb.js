@@ -8,7 +8,15 @@
 
 onRecordCreateRequest((e) => {
 	e.next();
-	require(`${__hooks}/notify.js`).eventChanged(e.app, e.record, 'create', e.auth);
+	// A split-off occurrence reads as an edit to the family ("moved this
+	// day"), not as a brand-new event.
+	const split = e.record.getString('occurrenceOf');
+	require(`${__hooks}/notify.js`).eventChanged(
+		e.app,
+		e.record,
+		split ? 'update' : 'create',
+		e.auth
+	);
 }, 'events');
 
 onRecordUpdateRequest((e) => {

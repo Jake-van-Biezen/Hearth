@@ -1,5 +1,13 @@
 import type { RecordModel } from 'pocketbase';
 import { pb } from '$lib/pocketbase';
+import {
+	expandRecurring,
+	parseDate,
+	seriesNext,
+	type EventException
+} from './recur';
+export { amsDateKey, expandRecurring, parseDate, rebaseSeriesAnchor, seriesNext } from './recur';
+export type { EventException, RecurringEvent } from './recur';
 
 export type Family = RecordModel & { name: string; members: string[] };
 
@@ -20,21 +28,20 @@ export type CalendarEvent = RecordModel & {
 	startsAt: string;
 	endsAt: string;
 	allDay: boolean;
-	/** "" | "weekly" | "monthly". Series-only: one event, many occurrences. */
+	/** "" | "weekly" | "monthly". One event expands to many occurrences. */
 	recurrence: string;
+	/** Occurrences split off (or deleted) from a series, keyed by amsDateKey. */
+	exceptions: EventException[];
+	/** For a split-off occurrence: the series it came from. */
+	occurrenceOf: string;
+	/** For a split-off occurrence: the Amsterdam date it replaced. */
+	originDate: string;
 	/** Books the family car for the event's duration; overlaps are rejected server-side. */
 	usesCar: boolean;
 	createdBy: string;
 };
 
 const DAY = 86_400_000;
-
-/** PocketBase dates come as "YYYY-MM-DD HH:mm:ss.sssZ"; Safari needs the T. */
-export function parseDate(value: string): Date | null {
-	if (!value) return null;
-	const d = new Date(value.replace(' ', 'T'));
-	return Number.isNaN(d.getTime()) ? null : d;
-}
 
 export function startOfDay(d: Date): Date {
 	return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -129,83 +136,6 @@ export function onDay(ev: CalendarEvent, day: Date): boolean {
 export function sortForDay(a: CalendarEvent, b: CalendarEvent): number {
 	if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
 	return (parseDate(a.startsAt)?.getTime() ?? 0) - (parseDate(b.startsAt)?.getTime() ?? 0);
-}
-
-// ------------------------------------------------------------- repetition --
-
-/**
- * The nextinstant of a recurring series at/after `from`, or null once past
- * the cap (recurring series have no end date; stop looking after two years).
- * Weekly keeps the weekday, monthly the day of the month (months without
- * that date, like Feb 31, are skipped).
- */
-export function seriesNext(ev: CalendarEvent, from: Date): Date | null {
-	const start = parseDate(ev.startsAt);
-	if (!start || !ev.recurrence) return null;
-	const cap = new Date(from.getFullYear() + 2, from.getMonth(), from.getDate(), 23, 59, 59, 999);
-	if (ev.recurrence === 'weekly') {
-		const steps = Math.max(0, Math.ceil(daysBetween(startOfDay(start), from) / 7));
-		let occ = addDays(start, steps * 7);
-		if (daysBetween(startOfDay(from), startOfDay(occ)) === 0 && occ.getTime() < from.getTime())
-			occ = addDays(occ, 7);
-		return occ.getTime() <= cap.getTime() ? occ : null;
-	}
-	if (ev.recurrence === 'monthly') {
-		for (let k = 0; k < 36; k++) {
-			// Skim past months already behind `from` without walking all of them.
-			const baseMonths =
-				k === 0
-					? (from.getFullYear() - start.getFullYear()) * 12 + (from.getMonth() - start.getMonth())
-					: 1;
-			const occ = new Date(
-				start.getFullYear(),
-				start.getMonth() + Math.max(0, baseMonths) + k,
-				start.getDate(),
-				start.getHours(),
-				start.getMinutes(),
-				start.getSeconds()
-			);
-			// Rolled over (Feb 31 → Mar 2): that month has no such date; skip it.
-			if (occ.getDate() !== start.getDate()) continue;
-			if (occ.getTime() < from.getTime()) continue;
-			return occ.getTime() <= cap.getTime() ? occ : null;
-		}
-	}
-	return null;
-}
-
-const OCCURRENCE_LIMIT = 260; // well past 2 years of either rule
-
-/**
- * Expand recurring series into concrete occurrences inside
- * [rangeStart, rangeEnd). Non-recurring events pass through untouched;
- * an occurrence is a shallow copy of the base with shifted timestamps.
- */
-export function expandRecurring(
-	events: CalendarEvent[],
-	rangeStart: Date,
-	rangeEnd: Date
-): CalendarEvent[] {
-	return events.flatMap((ev) => {
-		if (!ev.recurrence) return [ev];
-		const base = parseDate(ev.startsAt);
-		if (!base) return [];
-		const end = parseDate(ev.endsAt);
-		const delta = end ? end.getTime() - base.getTime() : 0;
-		const out: CalendarEvent[] = [];
-		let from = rangeStart;
-		for (let n = 0; n < OCCURRENCE_LIMIT; n++) {
-			const occ = seriesNext({ ...ev, startsAt: ev.startsAt }, from);
-			if (!occ || occ.getTime() >= rangeEnd.getTime()) break;
-			out.push({
-				...ev,
-				startsAt: occ.toISOString(),
-				endsAt: delta ? new Date(occ.getTime() + delta).toISOString() : ''
-			});
-			from = addDays(startOfDay(occ), 1);
-		}
-		return out;
-	});
 }
 
 export async function loadFamily(userId: string): Promise<Family | null> {

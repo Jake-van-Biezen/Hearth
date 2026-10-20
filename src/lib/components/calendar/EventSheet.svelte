@@ -2,15 +2,18 @@
 	import { Car, Lock, X } from '@lucide/svelte';
 	import { pb } from '$lib/pocketbase';
 	import {
+		amsDateKey,
 		addDays,
 		daysBetween,
 		formatTime,
 		fromDateInput,
 		parseDate,
+		rebaseSeriesAnchor,
 		startOfDay,
 		toDateInput,
 		type Calendar,
-		type CalendarEvent
+		type CalendarEvent,
+		type EventException
 	} from '$lib/calendar';
 
 	let {
@@ -44,6 +47,8 @@
 	let endTime = $state('');
 	let calendarId = $state('');
 	let repeat = $state('');
+	/** Editing one occurrence of a series: "all" touches every repeat, "one" splits the day off. */
+	let scope = $state<'one' | 'all'>('all');
 	let usesCar = $state(false);
 	let busy = $state(false);
 	let confirmDelete = $state(false);
@@ -104,6 +109,7 @@
 		date = toDateInput(start);
 		allDay = ev.allDay;
 		repeat = ev.recurrence ?? '';
+		scope = 'all';
 		usesCar = ev.usesCar ?? false;
 		startTime = ev.allDay ? nextHour() : formatTime(start);
 		endTime = end && !ev.allDay ? formatTime(end) : '';
@@ -129,6 +135,17 @@
 		return "The home server didn't accept this. Try again, or check you're still in the family.";
 	}
 
+	/**
+	 * Add or remove the tapped day from the series' exceptions. Removing
+	 * restores the regular occurrence; adding covers it over.
+	 */
+	async function toggleOccurrence(id: string, key: string, drop: boolean): Promise<void> {
+		const base = await pb.collection('events').getOne<CalendarEvent>(id);
+		const others = (base.exceptions ?? []).filter((x) => x.d !== key);
+		const exceptions: EventException[] = drop ? others : [...others, { d: key }];
+		await pb.collection('events').update(base.id, { exceptions });
+	}
+
 	async function remove() {
 		if (!editing) return;
 		if (!confirmDelete) {
@@ -138,7 +155,12 @@
 		error = '';
 		busy = true;
 		try {
-			await pb.collection('events').delete(editing.id);
+			if (editing.recurrence && scope === 'one') {
+				const key = amsDateKey(parseDate(editing.startsAt) ?? new Date());
+				await toggleOccurrence(editing.id, key, true);
+			} else {
+				await pb.collection('events').delete(editing.id);
+			}
 			close();
 			onsaved();
 		} catch (err) {
@@ -205,7 +227,42 @@
 		};
 		try {
 			if (editing) {
-				await pb.collection('events').update(editing.id, data);
+				if (editing.recurrence && scope === 'one') {
+					// Split: the series skips this day and a standalone event
+					// takes its slot. Batched so the family never sees both
+					// (or neither) for long; base first so a car booking in
+					// the edited slot doesn't clash with the series itself.
+					const key = amsDateKey(parseDate(editing.startsAt) ?? new Date());
+					const base = await pb.collection('events').getOne<CalendarEvent>(editing.id);
+					const others = (base.exceptions ?? []).filter((x) => x.d !== key);
+					const batch = pb.createBatch();
+					batch
+						.collection('events')
+						.update(base.id, { exceptions: [...others, { d: key }] });
+					batch.collection('events').create({
+						...data,
+						recurrence: '',
+						occurrenceOf: base.id,
+						originDate: key,
+						createdBy: pb.authStore.record?.id ?? ''
+					});
+					await batch.send();
+				} else if (editing.recurrence) {
+					// All repeats: move the series anchor onto the edited day
+					// (nearest match to its current rhythm) and apply the
+					// edited fields to every occurrence.
+					const base = await pb.collection('events').getOne<CalendarEvent>(editing.id);
+					const baseStart = parseDate(base.startsAt) ?? new Date();
+					const anchor = rebaseSeriesAnchor(baseStart, startsAt, repeat);
+					const held = endsAt ? endsAt.getTime() - startsAt.getTime() : 0;
+					await pb.collection('events').update(base.id, {
+						...data,
+						startsAt: anchor.toISOString(),
+						endsAt: endsAt ? new Date(anchor.getTime() + held).toISOString() : ''
+					});
+				} else {
+					await pb.collection('events').update(editing.id, data);
+				}
 			} else {
 				await pb
 					.collection('events')
@@ -283,17 +340,40 @@
 			<span class="car"><Car size={18} strokeWidth={2} aria-hidden="true" />Needs the car</span>
 		</label>
 
-		<fieldset class="cals">
-			<legend>Repeats</legend>
-			<div class="calrow">
-				{#each REPEATS as r (r.value)}
+		{#if editing?.recurrence}
+			<fieldset class="cals">
+				<legend>Applies to</legend>
+				<div class="calrow">
 					<label class="rep">
-						<input type="radio" name="repeat" value={r.value} bind:group={repeat} />
-						<span>{r.label}</span>
+						<input type="radio" name="scope" value="all" bind:group={scope} />
+						<span>All events</span>
 					</label>
-				{/each}
-			</div>
-		</fieldset>
+					<label class="rep">
+						<input type="radio" name="scope" value="one" bind:group={scope} />
+						<span>This event</span>
+					</label>
+				</div>
+				{#if scope === 'one'}
+					<p class="hint cals-hint">
+						Just this one; the series keeps repeating as before.
+					</p>
+				{/if}
+			</fieldset>
+		{/if}
+
+		{#if !(editing && editing.recurrence && scope === 'one')}
+			<fieldset class="cals">
+				<legend>Repeats</legend>
+				<div class="calrow">
+					{#each REPEATS as r (r.value)}
+						<label class="rep">
+							<input type="radio" name="repeat" value={r.value} bind:group={repeat} />
+							<span>{r.label}</span>
+						</label>
+					{/each}
+				</div>
+			</fieldset>
+		{/if}
 
 		<fieldset class="cals">
 			<legend>Calendar</legend>
@@ -327,7 +407,11 @@
 					onclick={remove}
 					disabled={busy}
 				>
-					{confirmDelete ? 'Tap again to delete' : 'Delete'}
+					{confirmDelete
+						? 'Tap again to delete'
+						: editing?.recurrence && scope === 'one'
+							? 'Delete this one'
+							: 'Delete'}
 				</button>
 			{:else}
 				<button type="button" class="ghost" onclick={close}>Cancel</button>
