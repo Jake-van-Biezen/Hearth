@@ -16,7 +16,7 @@
 	} = $props();
 
 	// Same marked set the server uses when it hands out personal calendars.
-	const COLORS = ['#3b78c4', '#3b9e6b', '#d9b12e', '#c0392b', '#8e5bb5', '#e07b39', '#2a9d9a', '#c2577f'];
+	const COLORS = ['#3b78c4', '#3b9e6b', '#d9b12e', 'var(--red-display)', '#8e5bb5', '#e07b39', '#2a9d9a', '#c2577f'];
 
 	let dialog: HTMLDialogElement | undefined = $state();
 	let nameInput: HTMLInputElement | undefined = $state();
@@ -320,11 +320,11 @@
 		overflow-y: auto;
 		overscroll-behavior: contain;
 		border: none;
-		border-top: 2px solid #22252a;
+		border-top: 2px solid var(--ink);
 		border-radius: 8px 8px 0 0;
 		padding: 0;
-		background: #fbfaf4;
-		color: #22252a;
+		background: var(--paper);
+		color: var(--ink);
 		font-family: 'Karla Variable', 'Karla', sans-serif;
 		box-shadow: 0 -18px 48px -18px rgba(34, 37, 42, 0.3);
 	}
@@ -334,7 +334,7 @@
 	}
 
 	.sheet::backdrop {
-		background: rgba(34, 37, 42, 0.35);
+		background: var(--rule);
 	}
 
 	@media (min-width: 720px) {
@@ -342,7 +342,7 @@
 			inset: 0;
 			margin: auto;
 			height: fit-content;
-			border: 2px solid #22252a;
+			border: 2px solid var(--ink);
 			border-radius: 8px;
 		}
 	}
@@ -395,14 +395,14 @@
 		place-items: center;
 		border: none;
 		background: none;
-		color: #4c5260;
+		color: var(--ink-soft);
 		border-radius: 999px;
 		cursor: pointer;
 		flex-shrink: 0;
 	}
 
 	.icon:hover {
-		background: #f0ece2;
+		background: var(--paper-press);
 	}
 
 	.icon:disabled {
@@ -412,13 +412,13 @@
 
 	.head .back {
 		margin-left: -10px;
-		color: #22252a;
+		color: var(--ink);
 	}
 
 	button:focus-visible,
 	input:focus-visible,
 	.swatch:has(input:focus-visible) {
-		outline: 2px solid #22252a;
+		outline: 2px solid var(--ink);
 		outline-offset: 2px;
 	}
 
@@ -453,7 +453,7 @@
 	}
 
 	.item:hover {
-		background: #f6f2e9;
+		background: var(--paper-raise);
 	}
 
 	.sw {
@@ -467,7 +467,7 @@
 	.plussw {
 		flex-shrink: 0;
 		width: 14px;
-		color: #4c5260;
+		color: var(--ink-soft);
 	}
 
 	.txt {
@@ -492,12 +492,12 @@
 	.m {
 		font-size: 13px;
 		line-height: 1.45;
-		color: #4c5260;
+		color: var(--ink-soft);
 	}
 
 	.item :global(.lock) {
 		flex-shrink: 0;
-		color: #666b76;
+		color: var(--ink-faint);
 	}
 
 	/* ---------- form ---------- */
@@ -518,7 +518,7 @@
 	legend {
 		font-size: 14px;
 		font-weight: 600;
-		color: #22252a;
+		color: var(--ink);
 	}
 
 	legend {
@@ -529,19 +529,19 @@
 	input[type='text'] {
 		height: 48px;
 		padding: 0 14px;
-		border: 1px solid #a9adb5;
+		border: 1px solid var(--ctrl-mute);
 		border-radius: 4px;
-		background: #ffffff;
+		background: var(--sheet);
 		font: inherit;
 		font-size: 17px;
-		color: #22252a;
+		color: var(--ink);
 		width: 100%;
 		min-width: 0;
-		caret-color: #c0392b;
+		caret-color: var(--red-display);
 	}
 
 	input::placeholder {
-		color: #6b707a;
+		color: var(--ink-mute);
 	}
 
 	.swatches {
@@ -561,7 +561,7 @@
 
 	.readonly {
 		font-size: 14px;
-		color: #4c5260;
+		color: var(--ink-soft);
 	}
 
 	.row {
@@ -582,7 +582,7 @@
 	}
 
 	.swatch:hover {
-		background: #f0ece2;
+		background: var(--paper-press);
 	}
 
 	.swatch input {
@@ -599,23 +599,23 @@
 	}
 
 	.swatch:has(input:checked) {
-		border-color: #22252a;
+		border-color: var(--ink);
 	}
 
 	.hint {
 		font-size: 14px;
 		line-height: 1.45;
-		color: #4c5260;
+		color: var(--ink-soft);
 	}
 
 	.hint.warn {
-		color: #666b76;
+		color: var(--ink-faint);
 	}
 
 	.error {
 		font-size: 14px;
 		line-height: 1.45;
-		color: #a03427;
+		color: var(--err);
 	}
 
 	.actions {
@@ -639,44 +639,44 @@
 	}
 
 	.danger {
-		background: #ffffff;
-		border: 1px solid #c9ccd2;
-		color: #a03427;
+		background: var(--sheet);
+		border: 1px solid var(--ctrl-border);
+		color: var(--err);
 		margin-right: auto;
 	}
 
 	.danger:hover:not(:disabled) {
-		background: #fbeeec;
+		background: var(--err-tint);
 	}
 
 	.danger.armed,
 	.danger.armed:hover:not(:disabled) {
-		background: #a03427;
-		border-color: #a03427;
-		color: #ffffff;
+		background: var(--err);
+		border-color: var(--err);
+		color: var(--paper);
 	}
 
 	.ghost {
-		background: #ffffff;
-		border: 1px solid #c9ccd2;
-		color: #22252a;
+		background: var(--sheet);
+		border: 1px solid var(--ctrl-border);
+		color: var(--ink);
 		box-shadow: 0 1px 2px rgba(34, 37, 42, 0.08);
 	}
 
 	.ghost:hover:not(:disabled) {
-		background: #f6f2e9;
+		background: var(--paper-raise);
 	}
 
 	.primary {
-		background: #22252a;
-		border: 1px solid #22252a;
-		color: #fbfaf4;
+		background: var(--ink);
+		border: 1px solid var(--ink);
+		color: var(--paper);
 		flex: 1;
 		max-width: 220px;
 	}
 
 	.primary:hover:not(:disabled) {
-		background: #383c44;
+		background: var(--ink-raise);
 	}
 
 	.actions button:active:not(:disabled) {

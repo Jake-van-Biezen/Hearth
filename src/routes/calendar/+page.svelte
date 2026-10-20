@@ -30,6 +30,7 @@
 	import EventSheet from '$lib/components/calendar/EventSheet.svelte';
 	import UpdatesSheet from '$lib/components/calendar/UpdatesSheet.svelte';
 	import CalendarsSheet from '$lib/components/calendar/CalendarsSheet.svelte';
+	import ThemeToggle from '$lib/components/theme/ThemeToggle.svelte';
 	import {
 		forgetPushOnSignOut,
 		loadNotifications,
@@ -285,13 +286,17 @@
 		const uid = pb.authStore.record?.id;
 		if (!uid) return goto('/', { replaceState: true });
 		startSync();
+		// Read ?v=month before the query is stripped below, or reloads drop to week.
+		const params = new URLSearchParams(page.url.search);
+		const wantMonth = params.get('v') === 'month';
 		if (page.url.search) {
-			applyLink(page.url.searchParams);
-			replaceState('/calendar', {});
+			applyLink(params);
+			// Native replaceState: the router is not initialised yet on a hard
+			// reload, and $app/navigation's replaceState throws there.
+			window.history.replaceState(window.history.state, '', wantMonth ? '/calendar?v=month' : '/calendar');
 		}
-		if (view === 'week' && new URLSearchParams(window.location.search).get('v') === 'month') {
+		if (view === 'week' && wantMonth && !params.get('day')) {
 			view = 'month';
-			replaceState('/calendar?v=month', {});
 		}
 		// Open straight from the offline cache when there is one: the calendar
 		// shows at once, and the network (which may be slow or gone) only
@@ -575,6 +580,7 @@
 				<div class="titlerow">
 				<h1 class="fam">{family?.name ?? 'Hearth'}</h1>
 				<div class="titlebtns">
+					<ThemeToggle />
 					<button class="round cals" onclick={() => calsSheet?.open()} aria-label="Calendars">
 						<CalendarDays size={20} strokeWidth={2.25} />
 					</button>
@@ -694,7 +700,7 @@
 							<ul class="chips">
 								{#each day.events as ev, j (ev.id)}
 									{@const cal = calById.get(ev.calendar)}
-									{@const color = cal?.color ?? '#666b76'}
+									{@const color = cal?.color ?? 'var(--ink-faint)'}
 									{@const time = chipTime(ev, day.date)}
 									<li
 										class="chip"
@@ -773,7 +779,7 @@
 								{#if cell.events.length}
 									<span class="mchips" aria-hidden="true">
 										{#each cell.events.slice(0, 2) as ev (ev.id)}
-											{@const color = calById.get(ev.calendar)?.color ?? '#666b76'}
+											{@const color = calById.get(ev.calendar)?.color ?? 'var(--ink-faint)'}
 											<span class="mdot" class:hollow={ev.allDay} style={`--c:${color}`}>
 												{ev.title}
 											</span>
@@ -805,7 +811,7 @@
 								<ul class="chips">
 									{#each selEvents as ev (ev.id)}
 										{@const cal = calById.get(ev.calendar)}
-										{@const color = cal?.color ?? '#666b76'}
+										{@const color = cal?.color ?? 'var(--ink-faint)'}
 										{@const time = chipTime(ev, selectedDay)}
 										<li
 											class="chip"
@@ -891,12 +897,12 @@
 <style>
 	.page {
 		min-height: 100dvh;
-		background-color: #fbfaf4;
+		background-color: var(--paper);
 		background-image:
-			linear-gradient(rgba(122, 150, 190, 0.16) 1px, transparent 1px),
-			linear-gradient(90deg, rgba(122, 150, 190, 0.16) 1px, transparent 1px);
+			linear-gradient(var(--lattice) 1px, transparent 1px),
+			linear-gradient(90deg, var(--lattice) 1px, transparent 1px);
 		background-size: 26px 26px;
-		color: #22252a;
+		color: var(--ink);
 		font-family: 'Karla Variable', 'Karla', sans-serif;
 		display: flex;
 		justify-content: center;
@@ -934,7 +940,7 @@
 		bottom: 0;
 		left: 18px;
 		width: 3px;
-		background: rgba(208, 80, 64, 0.5);
+		background: var(--margin);
 	}
 
 	.sr {
@@ -989,9 +995,9 @@
 		display: grid;
 		place-items: center;
 		border-radius: 999px;
-		border: 2px solid #fbfaf4;
-		background: #c0392b;
-		color: #ffffff;
+		border: 2px solid var(--paper);
+		background: var(--red-display);
+		color: #fbfaf4;
 		font-size: 11px;
 		font-weight: 700;
 		line-height: 1;
@@ -1016,7 +1022,7 @@
 		font-size: clamp(1.75rem, 8.4vw, 2.25rem);
 		line-height: 1.15;
 		padding-top: 4px;
-		color: #c0392b;
+		color: var(--red-display);
 		transform: rotate(-2deg);
 		transform-origin: left bottom;
 		width: fit-content;
@@ -1033,7 +1039,7 @@
 		min-width: 0;
 		font-size: 14px;
 		line-height: 1.3;
-		color: #4c5260;
+		color: var(--ink-soft);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -1043,7 +1049,7 @@
 
 	.wk {
 		font-size: 13px;
-		color: #666b76;
+		color: var(--ink-faint);
 	}
 
 	.weeknav {
@@ -1065,9 +1071,9 @@
 	/* Week | Month: a standard segmented pill, active segment is ink. */
 	.modes {
 		display: flex;
-		border: 1px solid #c9ccd2;
+		border: 1px solid var(--ctrl-border);
 		border-radius: 999px;
-		background: #ffffff;
+		background: var(--sheet);
 		box-shadow: 0 1px 2px rgba(34, 37, 42, 0.08);
 		overflow: hidden;
 	}
@@ -1079,23 +1085,23 @@
 		background: transparent;
 		font-size: 13px;
 		font-weight: 600;
-		color: #4c5260;
+		color: var(--ink-soft);
 		transition:
 			background-color 120ms ease-out,
 			color 120ms ease-out;
 	}
 
 	.mode + .mode {
-		border-left: 1px solid #e3e4e8;
+		border-left: 1px solid var(--hairline);
 	}
 
 	.mode[aria-pressed='true'] {
-		background: #22252a;
-		color: #fbfaf4;
+		background: var(--ink);
+		color: var(--paper);
 	}
 
 	.mode:hover[aria-pressed='false'] {
-		background: #f6f2e9;
+		background: var(--paper-raise);
 	}
 
 	.mode:active {
@@ -1109,15 +1115,15 @@
 	}
 
 	button:focus-visible {
-		outline: 2px solid #22252a;
+		outline: 2px solid var(--ink);
 		outline-offset: 2px;
 	}
 
 	.round,
 	.pill {
 		height: 44px;
-		border: 1px solid #c9ccd2;
-		background: #ffffff;
+		border: 1px solid var(--ctrl-border);
+		background: var(--sheet);
 		border-radius: 999px;
 		box-shadow: 0 1px 2px rgba(34, 37, 42, 0.08);
 		font-size: 15px;
@@ -1143,7 +1149,7 @@
 
 	.round:hover,
 	.pill:hover:not(:disabled) {
-		background: #f6f2e9;
+		background: var(--paper-raise);
 	}
 
 	.round:active,
@@ -1152,7 +1158,7 @@
 	}
 
 	.pill:disabled {
-		color: #666b76;
+		color: var(--ink-faint);
 		box-shadow: none;
 		background: transparent;
 		cursor: default;
@@ -1172,28 +1178,28 @@
 	.link.quiet {
 		font-size: 13px;
 		font-weight: 400;
-		color: #666b76;
+		color: var(--ink-faint);
 	}
 
 	.banner {
 		margin: 0 0 12px;
 		font-size: 14px;
 		line-height: 1.45;
-		color: #a03427;
+		color: var(--err);
 	}
 
 	.banner .link {
-		color: #a03427;
+		color: var(--err);
 		min-height: 0;
 	}
 
 	/* Offline strip: neutral while things are merely waiting, red on failure. */
 	.banner.sync {
-		color: #4c5260;
+		color: var(--ink-soft);
 	}
 
 	.banner.sync.failed {
-		color: #a03427;
+		color: var(--err);
 	}
 
 	.banner.sync .link {
@@ -1245,7 +1251,7 @@
 			background: transparent;
 			box-shadow:
 				0 1px 2px rgba(34, 37, 42, 0.06),
-				0 18px 48px -18px rgba(34, 37, 42, 0.22);
+				0 18px 48px -18px var(--rule-dim);
 		}
 	}
 
@@ -1253,9 +1259,9 @@
 		position: relative;
 		min-height: 132px;
 		padding: 6px 8px 10px;
-		border: 1px solid rgba(34, 37, 42, 0.35);
+		border: 1px solid var(--rule);
 		border-radius: 4px;
-		background: rgba(251, 250, 244, 0.88);
+		background: var(--box);
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
@@ -1264,12 +1270,12 @@
 
 	.box.weekend {
 		background:
-			linear-gradient(rgba(208, 80, 64, 0.07), rgba(208, 80, 64, 0.07)),
-			rgba(251, 250, 244, 0.88);
+			linear-gradient(var(--weekend), var(--weekend)),
+			var(--box);
 	}
 
 	.box.today {
-		border: 2px solid #22252a;
+		border: 2px solid var(--ink);
 		padding: 5px 7px 9px;
 	}
 
@@ -1296,13 +1302,13 @@
 
 	.dnum {
 		font-size: 13px;
-		color: #666b76;
+		color: var(--ink-faint);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.today .dnum {
-		color: #ffffff;
-		background: #c0392b;
+		color: #fbfaf4;
+		background: var(--red-display);
 		font-weight: 700;
 		border-radius: 999px;
 		padding: 1px 7px;
@@ -1318,7 +1324,7 @@
 		background: none;
 		border: none;
 		border-radius: 999px;
-		color: #666b76;
+		color: var(--ink-faint);
 		transition:
 			background-color 120ms ease-out,
 			color 120ms ease-out;
@@ -1331,8 +1337,8 @@
 	}
 
 	.addday:hover:not(:disabled) {
-		background: #f0ece2;
-		color: #22252a;
+		background: var(--paper-press);
+		color: var(--ink);
 	}
 
 	.addday:disabled {
@@ -1387,7 +1393,7 @@
 	}
 
 	.chip:has(.hit:focus-visible) {
-		outline: 2px solid #22252a;
+		outline: 2px solid var(--ink);
 		outline-offset: 2px;
 	}
 
@@ -1414,8 +1420,8 @@
 	}
 
 	.chip.allday {
-		background: #ffffff;
-		color: #22252a;
+		background: var(--sheet);
+		color: var(--ink);
 		border: 1.5px dashed var(--c);
 		padding: 3.5px 6px;
 	}
@@ -1459,26 +1465,26 @@
 
 	.free {
 		font-size: 13px;
-		color: #666b76;
+		color: var(--ink-faint);
 	}
 
 	/* ---------- next up ---------- */
 
 	.box.next {
-		border: 2px solid #22252a;
-		background: #ffffff;
+		border: 2px solid var(--ink);
+		background: var(--sheet);
 		padding: 5px 9px 10px;
 		gap: 0;
 	}
 
 	.next .dname {
-		color: #c0392b;
+		color: var(--red-display);
 	}
 
 	.when {
 		font-size: 13px;
 		font-weight: 700;
-		color: #4c5260;
+		color: var(--ink-soft);
 		margin-top: 2px;
 	}
 
@@ -1510,7 +1516,7 @@
 		align-items: center;
 		gap: 6px;
 		font-size: 13px;
-		color: #4c5260;
+		color: var(--ink-soft);
 	}
 
 	.which {
@@ -1532,7 +1538,7 @@
 		margin-top: 6px;
 		font-size: 14px;
 		line-height: 1.4;
-		color: #4c5260;
+		color: var(--ink-soft);
 	}
 
 	/* ---------- month ---------- */
@@ -1566,7 +1572,7 @@
 		font-size: 13px;
 		line-height: 1;
 		text-align: center;
-		color: #22252a;
+		color: var(--ink);
 	}
 
 	/* Month as one ruled sheet: the frame draws the box, the 1px gaps between
@@ -1576,9 +1582,9 @@
 		grid-template-columns: repeat(7, 1fr);
 		grid-template-rows: repeat(var(--rows), minmax(44px, 1fr));
 		gap: 1px;
-		border: 2px solid #22252a;
+		border: 2px solid var(--ink);
 		border-radius: 4px;
-		background: rgba(34, 37, 42, 0.22);
+		background: var(--rule-dim);
 		overflow: hidden;
 		min-height: calc(var(--rows) * 48px);
 	}
@@ -1592,23 +1598,23 @@
 		padding: 4px 4px 3px;
 		min-width: 0;
 		border: none;
-		background: rgba(251, 250, 244, 0.92);
+		background: color-mix(in srgb, var(--paper) 92%, transparent);
 		text-align: left;
 		transition: background-color 120ms ease-out;
 	}
 
 	.mcell:hover {
-		background: #f6f2e9;
+		background: var(--paper-raise);
 	}
 
 	.mcell.weekend {
 		background:
-			linear-gradient(rgba(208, 80, 64, 0.07), rgba(208, 80, 64, 0.07)),
-			rgba(251, 250, 244, 0.92);
+			linear-gradient(var(--weekend), var(--weekend)),
+			color-mix(in srgb, var(--paper) 92%, transparent);
 	}
 
 	.mcell.dim {
-		background: rgba(251, 250, 244, 0.55);
+		background: var(--box-dim);
 	}
 
 	.mcell.dim .mnum,
@@ -1622,7 +1628,7 @@
 	}
 
 	.mcell.sel {
-		outline: 2px solid #22252a;
+		outline: 2px solid var(--ink);
 		outline-offset: -2px;
 	}
 
@@ -1635,8 +1641,8 @@
 	}
 
 	.mcell.today .mnum {
-		color: #ffffff;
-		background: #c0392b;
+		color: #fbfaf4;
+		background: var(--red-display);
 		font-weight: 700;
 		border-radius: 999px;
 		line-height: 16px;
@@ -1662,7 +1668,7 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		color: #22252a;
+		color: var(--ink);
 	}
 
 	.mdot::before {
@@ -1677,7 +1683,7 @@
 	}
 
 	.mdot.hollow::before {
-		background: #fbfaf4;
+		background: var(--paper);
 		box-shadow: inset 0 0 0 1.5px var(--c);
 	}
 
@@ -1686,15 +1692,15 @@
 		font-size: 11px;
 		font-weight: 600;
 		line-height: 15px;
-		color: #666b76;
+		color: var(--ink-faint);
 	}
 
 	/* The tapped day, unfolded below the sheet's rules. */
 	.daypanel {
 		margin-top: 8px;
-		border: 2px solid #22252a;
+		border: 2px solid var(--ink);
 		border-radius: 4px;
-		background: #ffffff;
+		background: var(--sheet);
 		padding: 5px 9px 10px;
 		display: flex;
 		flex-direction: column;
@@ -1703,8 +1709,8 @@
 	}
 
 	.daypanel.today .dnum {
-		color: #ffffff;
-		background: #c0392b;
+		color: #fbfaf4;
+		background: var(--red-display);
 		font-weight: 700;
 		border-radius: 999px;
 		padding: 1px 7px;
@@ -1741,8 +1747,8 @@
 		gap: 8px;
 		border: none;
 		border-radius: 999px;
-		background: #22252a;
-		color: #fbfaf4;
+		background: var(--ink);
+		color: var(--paper);
 		font-size: 16px;
 		font-weight: 700;
 		box-shadow:
@@ -1755,7 +1761,7 @@
 	}
 
 	.add:hover:not(:disabled) {
-		background: #383c44;
+		background: var(--ink-raise);
 	}
 
 	.add:active:not(:disabled) {
@@ -1790,13 +1796,13 @@
 		margin-top: 10px;
 		font-size: 16px;
 		line-height: 1.5;
-		color: #4c5260;
+		color: var(--ink-soft);
 		max-width: 38ch;
 		overflow-wrap: anywhere;
 	}
 
 	.body strong {
-		color: #22252a;
+		color: var(--ink);
 	}
 
 	.row {
@@ -1820,7 +1826,7 @@
 
 		.chip.flash {
 			animation: none;
-			outline: 2.5px solid #c0392b;
+			outline: 2.5px solid var(--red-display);
 			outline-offset: 2px;
 		}
 	}

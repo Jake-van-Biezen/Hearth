@@ -461,11 +461,11 @@
 		overflow-y: auto;
 		overscroll-behavior: contain;
 		border: none;
-		border-top: 2px solid #22252a;
+		border-top: 2px solid var(--ink);
 		border-radius: 8px 8px 0 0;
 		padding: 0;
-		background: #fbfaf4;
-		color: #22252a;
+		background: var(--paper);
+		color: var(--ink);
 		font-family: 'Karla Variable', 'Karla', sans-serif;
 		box-shadow: 0 -18px 48px -18px rgba(34, 37, 42, 0.3);
 	}
@@ -475,7 +475,7 @@
 	}
 
 	.sheet::backdrop {
-		background: rgba(34, 37, 42, 0.35);
+		background: var(--rule);
 	}
 
 	@media (min-width: 720px) {
@@ -483,7 +483,7 @@
 			inset: 0;
 			margin: auto;
 			height: fit-content;
-			border: 2px solid #22252a;
+			border: 2px solid var(--ink);
 			border-radius: 8px;
 		}
 	}
@@ -531,13 +531,13 @@
 		place-items: center;
 		border: none;
 		background: none;
-		color: #4c5260;
+		color: var(--ink-soft);
 		border-radius: 999px;
 		cursor: pointer;
 	}
 
 	.icon:hover {
-		background: #f0ece2;
+		background: var(--paper-press);
 	}
 
 	.field {
@@ -550,13 +550,13 @@
 	legend {
 		font-size: 14px;
 		font-weight: 600;
-		color: #22252a;
+		color: var(--ink);
 	}
 
 	.field em {
 		font-style: normal;
 		font-weight: 400;
-		color: #666b76;
+		color: var(--ink-faint);
 		margin-left: 4px;
 	}
 
@@ -565,27 +565,27 @@
 	input[type='time'] {
 		height: 48px;
 		padding: 0 14px;
-		border: 1px solid #a9adb5;
+		border: 1px solid var(--ctrl-mute);
 		border-radius: 4px;
-		background: #ffffff;
+		background: var(--sheet);
 		font: inherit;
 		font-size: 17px;
-		color: #22252a;
+		color: var(--ink);
 		font-variant-numeric: tabular-nums;
 		width: 100%;
 		min-width: 0;
-		caret-color: #c0392b;
+		caret-color: var(--red-display);
 	}
 
 	input::placeholder {
-		color: #6b707a;
+		color: var(--ink-mute);
 	}
 
 	input:focus-visible,
 	button:focus-visible,
 	.cal:has(input:focus-visible),
 	.rep:has(input:focus-visible) {
-		outline: 2px solid #22252a;
+		outline: 2px solid var(--ink);
 		outline-offset: 2px;
 	}
 
@@ -611,7 +611,7 @@
 		width: 44px;
 		height: 26px;
 		border-radius: 999px;
-		background: #c9ccd2;
+		background: var(--ctrl-border);
 		position: relative;
 		cursor: pointer;
 		transition: background-color 140ms ease-out;
@@ -626,13 +626,13 @@
 		width: 20px;
 		height: 20px;
 		border-radius: 50%;
-		background: #ffffff;
+		background: var(--sheet);
 		box-shadow: 0 1px 2px rgba(34, 37, 42, 0.2);
 		transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
 	}
 
 	.toggle input:checked {
-		background: #22252a;
+		background: var(--ink);
 	}
 
 	.toggle input:checked::after {
@@ -661,7 +661,7 @@
 
 	.readonly {
 		font-size: 14px;
-		color: #4c5260;
+		color: var(--ink-soft);
 	}
 
 	legend {
@@ -681,9 +681,9 @@
 		gap: 8px;
 		height: 44px;
 		padding: 0 14px 0 12px;
-		border: 1px solid #c9ccd2;
+		border: 1px solid var(--ctrl-border);
 		border-radius: 999px;
-		background: #ffffff;
+		background: var(--sheet);
 		font-size: 15px;
 		font-weight: 600;
 		cursor: pointer;
@@ -696,9 +696,9 @@
 		align-items: center;
 		height: 44px;
 		padding: 0 14px;
-		border: 1px solid #c9ccd2;
+		border: 1px solid var(--ctrl-border);
 		border-radius: 999px;
-		background: #ffffff;
+		background: var(--sheet);
 		font-size: 15px;
 		font-weight: 600;
 		cursor: pointer;
@@ -713,9 +713,9 @@
 	}
 
 	.rep:has(input:checked) {
-		border: 2px solid #22252a;
+		border: 2px solid var(--ink);
 		padding: 0 13px;
-		background: #f6f2e9;
+		background: var(--paper-raise);
 	}
 
 	.cal .sw {
@@ -726,13 +726,13 @@
 	}
 
 	.cal:has(input:checked) {
-		border: 2px solid #22252a;
+		border: 2px solid var(--ink);
 		padding: 0 13px 0 11px;
-		background: #f6f2e9;
+		background: var(--paper-raise);
 	}
 
 	.cal :global(.lock) {
-		color: #4c5260;
+		color: var(--ink-soft);
 		margin-left: -2px;
 	}
 
@@ -744,31 +744,31 @@
 	.error {
 		font-size: 14px;
 		line-height: 1.45;
-		color: #a03427;
+		color: var(--err);
 	}
 
 	.hint {
 		margin-top: -6px;
 		font-size: 14px;
-		color: #4c5260;
+		color: var(--ink-soft);
 	}
 
 	.danger {
-		background: #ffffff;
-		border: 1px solid #c9ccd2;
-		color: #a03427;
+		background: var(--sheet);
+		border: 1px solid var(--ctrl-border);
+		color: var(--err);
 		margin-right: auto;
 	}
 
 	.danger:hover:not(:disabled) {
-		background: #fbeeec;
+		background: var(--err-tint);
 	}
 
 	.danger.armed,
 	.danger.armed:hover:not(:disabled) {
-		background: #a03427;
-		border-color: #a03427;
-		color: #ffffff;
+		background: var(--err);
+		border-color: var(--err);
+		color: var(--paper);
 	}
 
 	.actions {
@@ -792,26 +792,26 @@
 	}
 
 	.ghost {
-		background: #ffffff;
-		border: 1px solid #c9ccd2;
-		color: #22252a;
+		background: var(--sheet);
+		border: 1px solid var(--ctrl-border);
+		color: var(--ink);
 		box-shadow: 0 1px 2px rgba(34, 37, 42, 0.08);
 	}
 
 	.ghost:hover {
-		background: #f6f2e9;
+		background: var(--paper-raise);
 	}
 
 	.primary {
-		background: #22252a;
-		border: 1px solid #22252a;
-		color: #fbfaf4;
+		background: var(--ink);
+		border: 1px solid var(--ink);
+		color: var(--paper);
 		flex: 1;
 		max-width: 220px;
 	}
 
 	.primary:hover:not(:disabled) {
-		background: #383c44;
+		background: var(--ink-raise);
 	}
 
 	.actions button:active:not(:disabled) {

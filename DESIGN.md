@@ -95,7 +95,7 @@ Color does jobs, never decoration: saturated marker chips (blue, green, yellow) 
 - Standard controls in their own shared grammar (favorites: the white Google pill).
 - Chips carry events in saturated marker colors; color is information.
 - One authored motion moment per surface: things go up and settle, like paper hung on a wall.
-- Light only — paper is a daylight material; the household uses phones in lit rooms.
+- Light and dark — follows the system setting by default, with a manual Light / Dark / System toggle. The dark wall is the same planner after lights-out: warm charcoal ground, bone ink, chalk-blue lattice; markers keep their colors.
 
 ## Colors
 
@@ -207,5 +207,5 @@ Confirmation a change landed — success voice only; failures stay inline in the
 ### Don't:
 - **Don't** costume a control as a household object (magnet, magnet-board chrome, chalk scrawl on a form field).
 - **Don't** use marker display type for anything the task depends on reading twice.
-- **Don't** darken the paper for a dark mode — paper is not a mood that flips; if contrast in a bright room fails, revisit the chips, not the ground.
+- **Don't** flip the paper to cold or blue-black for dark mode — the night wall stays warm charcoal; markers and the red family keep their hue (red lifts one notch for legibility).
 - **Don't** invent placeholder data with claims — chips show planner-authentic shorthand events only.

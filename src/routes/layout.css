@@ -7,73 +7,166 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Planner tokens — the Kitchen Wall Planner, day and night.
+   Light: warm undyed paper, graphite ink. Dark: the same wall after
+   lights-out — warm charcoal ground, bone ink, chalk-blue lattice.
+   Markers (chips), the Google pill, and the red family keep their jobs. */
 :root {
+	/* planner surfaces */
+	--paper: #fbfaf4;
+	--sheet: #ffffff;
+	--box: rgba(251, 250, 244, 0.88);
+	--box-dim: rgba(251, 250, 244, 0.55);
+	--paper-raise: #f6f2e9;
+	--paper-press: #f0ece2;
+
+	/* planner ink */
+	--ink: #22252a;
+	--ink-soft: #4c5260;
+	--ink-faint: #666b76;
+	--ink-raise: #383c44;
+
+	/* planner rules and lines */
+	--rule: rgba(34, 37, 42, 0.35);
+	--rule-dim: rgba(34, 37, 42, 0.22);
+	--hairline: #e3e4e8;
+	--ctrl-border: #c9ccd2;
+	--lattice: rgba(122, 150, 190, 0.16);
+	--margin: rgba(208, 80, 64, 0.5);
+	--weekend: rgba(208, 80, 64, 0.07);
+
+	/* the red family + markers (markers equal day or night) */
+	--red: #c0392b;
+	--red-display: #c0392b;
+	--flash-red: rgba(192, 57, 43, 1);
+	--err: #a03427;
+	--err-tint: #fbeeec;
+	--ink-mute: #6b707a;
+	--ctrl-mute: #a9adb5;
+	--ok: #3b9e6b;
+
+	/* browser surfaces */
+	--selection: rgba(208, 80, 64, 0.25);
+
+	/* shadows */
+	--shadow-pill: 0 1px 2px rgba(34, 37, 42, 0.08);
+	--shadow-sheet:
+		0 1px 2px rgba(34, 37, 42, 0.06),
+		0 18px 48px -18px rgba(34, 37, 42, 0.22);
+	--shadow-toast: 0 1px 2px rgba(34, 37, 42, 0.06), 0 10px 28px -12px rgba(34, 37, 42, 0.25);
+	--shadow-add:
+		0 1px 2px rgba(34, 37, 42, 0.2),
+		0 8px 20px -8px rgba(34, 37, 42, 0.55);
+
 	--radius: 0.625rem;
-	--background: oklch(1 0 0);
-	--foreground: oklch(0.145 0 0);
-	--card: oklch(1 0 0);
-	--card-foreground: oklch(0.145 0 0);
-	--popover: oklch(1 0 0);
-	--popover-foreground: oklch(0.145 0 0);
-	--primary: oklch(0.491 0.27 292.581);
-	--primary-foreground: oklch(0.969 0.016 293.756);
-	--secondary: oklch(0.967 0.001 286.375);
-	--secondary-foreground: oklch(0.21 0.006 285.885);
-	--muted: oklch(0.97 0 0);
-	--muted-foreground: oklch(0.556 0 0);
-	--accent: oklch(0.97 0 0);
-	--accent-foreground: oklch(0.205 0 0);
-	--destructive: oklch(0.577 0.245 27.325);
-	--border: oklch(0.922 0 0);
-	--input: oklch(0.922 0 0);
-	--ring: oklch(0.708 0 0);
-	--chart-1: oklch(0.811 0.111 293.571);
-	--chart-2: oklch(0.606 0.25 292.717);
-	--chart-3: oklch(0.541 0.281 293.009);
-	--chart-4: oklch(0.491 0.27 292.581);
-	--chart-5: oklch(0.432 0.232 292.759);
-	--sidebar: oklch(0.985 0 0);
-	--sidebar-foreground: oklch(0.145 0 0);
-	--sidebar-primary: oklch(0.541 0.281 293.009);
-	--sidebar-primary-foreground: oklch(0.969 0.016 293.756);
-	--sidebar-accent: oklch(0.97 0 0);
-	--sidebar-accent-foreground: oklch(0.205 0 0);
-	--sidebar-border: oklch(0.922 0 0);
-	--sidebar-ring: oklch(0.708 0 0);
+	--background: var(--paper);
+	--foreground: var(--ink);
+	--card: var(--sheet);
+	--card-foreground: var(--ink);
+	--popover: var(--sheet);
+	--popover-foreground: var(--ink);
+	--primary: var(--ink);
+	--primary-foreground: var(--paper);
+	--secondary: var(--paper-raise);
+	--secondary-foreground: var(--ink);
+	--muted: var(--paper-raise);
+	--muted-foreground: var(--ink-soft);
+	--accent: var(--paper-raise);
+	--accent-foreground: var(--ink);
+	--destructive: var(--err);
+	--border: var(--ctrl-border);
+	--input: var(--ctrl-border);
+	--ring: var(--ink);
+	--chart-1: #3b78c4;
+	--chart-2: #3b9e6b;
+	--chart-3: #d9b12e;
+	--chart-4: #c0392b;
+	--chart-5: #4c5260;
+	--sidebar: var(--sheet);
+	--sidebar-foreground: var(--ink);
+	--sidebar-primary: #c0392b;
+	--sidebar-primary-foreground: #fbfaf4;
+	--sidebar-accent: var(--paper-raise);
+	--sidebar-accent-foreground: var(--ink);
+	--sidebar-border: var(--ctrl-border);
+	--sidebar-ring: var(--ink);
 }
 
 .dark {
-	--background: oklch(0.145 0 0);
-	--foreground: oklch(0.985 0 0);
-	--card: oklch(0.205 0 0);
-	--card-foreground: oklch(0.985 0 0);
-	--popover: oklch(0.205 0 0);
-	--popover-foreground: oklch(0.985 0 0);
-	--primary: oklch(0.432 0.232 292.759);
-	--primary-foreground: oklch(0.969 0.016 293.756);
-	--secondary: oklch(0.274 0.006 286.033);
-	--secondary-foreground: oklch(0.985 0 0);
-	--muted: oklch(0.269 0 0);
-	--muted-foreground: oklch(0.708 0 0);
-	--accent: oklch(0.269 0 0);
-	--accent-foreground: oklch(0.985 0 0);
-	--destructive: oklch(0.704 0.191 22.216);
-	--border: oklch(1 0 0 / 10%);
-	--input: oklch(1 0 0 / 15%);
-	--ring: oklch(0.556 0 0);
-	--chart-1: oklch(0.811 0.111 293.571);
-	--chart-2: oklch(0.606 0.25 292.717);
-	--chart-3: oklch(0.541 0.281 293.009);
-	--chart-4: oklch(0.491 0.27 292.581);
-	--chart-5: oklch(0.432 0.232 292.759);
-	--sidebar: oklch(0.205 0 0);
-	--sidebar-foreground: oklch(0.985 0 0);
-	--sidebar-primary: oklch(0.606 0.25 292.717);
-	--sidebar-primary-foreground: oklch(0.969 0.016 293.756);
-	--sidebar-accent: oklch(0.269 0 0);
-	--sidebar-accent-foreground: oklch(0.985 0 0);
-	--sidebar-border: oklch(1 0 0 / 10%);
-	--sidebar-ring: oklch(0.556 0 0);
+	/* the wall after lights-out: warm charcoal, never blue */
+	--paper: #211e1a;
+	--sheet: #2b2724;
+	--box: rgba(43, 39, 36, 0.92);
+	--box-dim: rgba(43, 39, 36, 0.45);
+	--paper-raise: #342f29;
+	--paper-press: #3b352e;
+
+	--ink: #ece7dc;
+	--ink-soft: #b0a99c;
+	--ink-faint: #8a8379;
+	--ink-raise: #d9d3c6;
+
+	/* rules stay chalk-light on the night wall */
+	--rule: rgba(236, 231, 220, 0.3);
+	--rule-dim: rgba(236, 231, 220, 0.18);
+	--hairline: #453f37;
+	--ctrl-border: #4a453e;
+	--lattice: rgba(140, 168, 205, 0.12);
+	--margin: rgba(214, 90, 70, 0.55);
+	--weekend: rgba(214, 90, 70, 0.1);
+
+	/* markers unchanged; red lifts one notch where it must text or glare */
+	--red: #c0392b;
+	--red-display: #d5503c;
+	--flash-red: rgba(213, 80, 60, 1);
+	--err: #e0705f;
+	--err-tint: rgba(224, 112, 95, 0.14);
+	--ink-mute: #9d968a;
+	--ctrl-mute: #6e685e;
+	--ok: #3b9e6b;
+
+	--shadow-pill: 0 1px 2px rgba(0, 0, 0, 0.35);
+	--shadow-sheet:
+		0 1px 2px rgba(0, 0, 0, 0.3),
+		0 18px 48px -18px rgba(0, 0, 0, 0.6);
+	--shadow-toast: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px -12px rgba(0, 0, 0, 0.6);
+	--shadow-add:
+		0 1px 2px rgba(0, 0, 0, 0.4),
+		0 8px 20px -8px rgba(0, 0, 0, 0.7);
+
+	--selection: rgba(208, 80, 64, 0.35);
+
+	--background: var(--paper);
+	--foreground: var(--ink);
+	--card: var(--sheet);
+	--card-foreground: var(--ink);
+	--popover: var(--sheet);
+	--popover-foreground: var(--ink);
+	--primary: var(--ink);
+	--primary-foreground: var(--paper);
+	--secondary: var(--paper-raise);
+	--secondary-foreground: var(--ink);
+	--muted: var(--paper-raise);
+	--muted-foreground: var(--ink-soft);
+	--accent: var(--paper-raise);
+	--accent-foreground: var(--ink);
+	--destructive: #e0705f;
+	--border: rgba(236, 231, 220, 0.14);
+	--input: rgba(236, 231, 220, 0.18);
+	--ring: var(--ink);
+	--chart-1: #4a8bd4;
+	--chart-2: #43a875;
+	--chart-3: #d9b12e;
+	--chart-4: #d5503c;
+	--chart-5: #b0a99c;
+	--sidebar: var(--sheet);
+	--sidebar-foreground: var(--ink);
+	--sidebar-primary: #d5503c;
+	--sidebar-primary-foreground: #211e1a;
+	--sidebar-accent: var(--paper-raise);
+	--sidebar-accent-foreground: var(--ink);
+	--sidebar-border: rgba(236, 231, 220, 0.14);
+	--sidebar-ring: var(--ink);
 }
 
 @theme inline {
@@ -124,8 +217,15 @@
 	}
 	body {
 		@apply bg-background text-foreground;
+		color-scheme: light;
+	}
+	.dark body {
+		color-scheme: dark;
 	}
 	html {
 		@apply font-sans;
+	}
+	::selection {
+		background: var(--selection);
 	}
 }

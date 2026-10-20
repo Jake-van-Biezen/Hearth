@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { pb } from '$lib/pocketbase';
+	import ThemeToggle from '$lib/components/theme/ThemeToggle.svelte';
 
 	let authed = $state(false);
 	let busy = $state(false);
@@ -43,6 +44,10 @@
 <main class="gate">
 	<div class="sheet">
 		<span class="marginline" aria-hidden="true"></span>
+
+		<div class="theme">
+			<ThemeToggle />
+		</div>
 
 		<header class="brand">
 			<h1>Hearth</h1>
@@ -89,12 +94,12 @@
 <style>
 	.gate {
 		min-height: 100dvh;
-		background-color: var(--planner-paper, #fbfaf4);
+		background-color: var(--planner-paper, var(--paper));
 		background-image:
-			linear-gradient(rgba(122, 150, 190, 0.16) 1px, transparent 1px),
-			linear-gradient(90deg, rgba(122, 150, 190, 0.16) 1px, transparent 1px);
+			linear-gradient(var(--lattice) 1px, transparent 1px),
+			linear-gradient(90deg, var(--lattice) 1px, transparent 1px);
 		background-size: 26px 26px;
-		color: #22252a;
+		color: var(--ink);
 		font-family: 'Karla Variable', 'Karla', sans-serif;
 		display: flex;
 		justify-content: center;
@@ -115,7 +120,7 @@
 			margin: 48px auto;
 			box-shadow:
 				0 1px 2px rgba(34, 37, 42, 0.06),
-				0 18px 48px -18px rgba(34, 37, 42, 0.22);
+				0 18px 48px -18px var(--rule-dim);
 		}
 	}
 
@@ -136,14 +141,21 @@
 		bottom: 0;
 		left: 34px;
 		width: 3px;
-		background: rgba(208, 80, 64, 0.5);
+		background: var(--margin);
+	}
+
+	.theme {
+		position: absolute;
+		top: 20px;
+		right: 20px;
+		z-index: 1;
 	}
 
 	.brand h1 {
 		font-family: 'Permanent Marker', cursive;
 		font-size: clamp(3.5rem, 16dvw, 4.25rem);
 		line-height: 1;
-		color: #c0392b;
+		color: var(--red-display);
 		transform: rotate(-2deg);
 		transform-origin: left bottom;
 		width: fit-content;
@@ -152,26 +164,26 @@
 	.tagline {
 		margin-top: 14px;
 		font-size: 17px;
-		color: #4c5260;
+		color: var(--ink-soft);
 	}
 
 	.week {
 		margin-top: clamp(40px, 9dvh, 78px);
 		display: grid;
 		grid-template-columns: repeat(7, 1fr);
-		border: 2px solid #22252a;
+		border: 2px solid var(--ink);
 		border-radius: 4px;
 		height: 150px;
 	}
 
 	.day {
 		position: relative;
-		border-right: 1px solid rgba(34, 37, 42, 0.35);
+		border-right: 1px solid var(--rule);
 	}
 
 	.day:last-child {
 		border-right: none;
-		background: rgba(208, 80, 64, 0.07);
+		background: var(--weekend);
 	}
 
 	.lbl {
@@ -181,7 +193,7 @@
 		text-align: center;
 		font-family: 'Permanent Marker', cursive;
 		font-size: 13px;
-		color: #22252a;
+		color: var(--ink);
 	}
 
 	.chip {
@@ -228,13 +240,13 @@
 		width: min(300px, 100%);
 		padding: 15px 24px;
 		border-radius: 999px;
-		background: #ffffff;
-		border: 1px solid #c9ccd2;
+		background: var(--sheet);
+		border: 1px solid var(--ctrl-border);
 		box-shadow: 0 1px 2px rgba(34, 37, 42, 0.08);
 		font-family: inherit;
 		font-size: 15px;
 		font-weight: 600;
-		color: #22252a;
+		color: var(--ink);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -251,7 +263,7 @@
 	}
 
 	.gbtn:hover:not(:disabled) {
-		background: #f6f2e9;
+		background: var(--paper-raise);
 	}
 
 	.gbtn:active:not(:disabled) {
@@ -264,7 +276,7 @@
 	}
 
 	.gbtn:focus-visible {
-		outline: 2px solid #22252a;
+		outline: 2px solid var(--ink);
 		outline-offset: 2px;
 	}
 
@@ -272,29 +284,27 @@
 		margin-top: 18px;
 		font-size: 14px;
 		line-height: 1.45;
-		color: #a03427;
+		color: var(--err);
 		max-width: 340px;
 	}
 
 	.signedin {
 		margin-top: clamp(44px, 10dvh, 72px);
 		font-size: 15px;
-		color: #4c5260;
+		color: var(--ink-soft);
 	}
 
 	.note {
 		margin-top: clamp(24px, 6dvh, 42px);
 		font-size: 13px;
-		color: #666b76;
+		color: var(--ink-faint);
 	}
 
 	.homefoot {
-		position: absolute;
-		bottom: clamp(28px, 6dvh, 48px);
-		width: calc(100% - 84px);
-		text-align: center;
+		margin-top: 12px;
+		text-align: left;
 		font-size: 13.5px;
-		color: #666b76;
+		color: var(--ink-faint);
 	}
 
 	.sheet ::selection {
