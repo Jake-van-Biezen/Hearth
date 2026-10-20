@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Lock, X } from '@lucide/svelte';
+	import { Car, Lock, X } from '@lucide/svelte';
 	import { pb } from '$lib/pocketbase';
 	import {
 		addDays,
@@ -23,6 +23,12 @@
 
 	const LAST_CAL_KEY = 'hearth:last-calendar';
 
+	const REPEATS = [
+		{ value: '', label: 'Never' },
+		{ value: 'weekly', label: 'Every week' },
+		{ value: 'monthly', label: 'Every month' }
+	] as const;
+
 	let dialog: HTMLDialogElement | undefined = $state();
 	let titleInput: HTMLInputElement | undefined = $state();
 
@@ -37,11 +43,21 @@
 	let startTime = $state('09:00');
 	let endTime = $state('');
 	let calendarId = $state('');
+	let repeat = $state('');
+	let usesCar = $state(false);
 	let busy = $state(false);
 	let confirmDelete = $state(false);
 	let error = $state('');
 
 	const isPrivate = $derived(calendars.find((c) => c.id === calendarId)?.visibility === 'private');
+
+	const repeatHint = $derived.by(() => {
+		const day = fromDateInput(date);
+		if (!repeat || !day) return '';
+		if (repeat === 'weekly')
+			return `Every ${day.toLocaleDateString('en-GB', { weekday: 'long' })} from now on.`;
+		return `On day ${day.getDate()} of each month from now on.`;
+	});
 
 	const endDayLabel = $derived.by(() => {
 		if (!spanDays) return '';
@@ -77,6 +93,8 @@
 		title = '';
 		date = toDateInput(day);
 		allDay = false;
+		repeat = '';
+		usesCar = false;
 		startTime = nextHour();
 		endTime = '';
 		const last = localStorage.getItem(LAST_CAL_KEY);
@@ -93,6 +111,8 @@
 		title = ev.title;
 		date = toDateInput(start);
 		allDay = ev.allDay;
+		repeat = ev.recurrence ?? '';
+		usesCar = ev.usesCar ?? false;
 		startTime = ev.allDay ? nextHour() : formatTime(start);
 		endTime = end && !ev.allDay ? formatTime(end) : '';
 		spanDays = end ? Math.max(0, daysBetween(startOfDay(start), startOfDay(end))) : 0;
@@ -109,6 +129,11 @@
 		if (status === 0)
 			return `Couldn't reach the home server, so nothing was ${what}. Check your connection and try again.`;
 		if (status === 404) return 'This event is gone. Someone may have deleted it already.';
+		// Car clash or missing end: the server explains who has it and when.
+		const data = (err as { response?: { data?: Record<string, { message?: string }> } }).response
+			?.data;
+		const carMsg = data?.usesCar?.message ?? data?.endsAt?.message;
+		if (status === 400 && carMsg) return carMsg;
 		return "The home server didn't accept this. Try again, or check you're still in the family.";
 	}
 
@@ -157,6 +182,10 @@
 				return;
 			}
 			startsAt = s;
+			if (!endTime && usesCar) {
+				error = 'Add an end time so everyone knows when the car is back.';
+				return;
+			}
 			if (endTime) {
 				const en = fromDateInput(toDateInput(addDays(day, spanDays)), endTime);
 				if (!en || en <= s) {
@@ -178,7 +207,9 @@
 			title: name,
 			startsAt: startsAt.toISOString(),
 			endsAt: endsAt ? endsAt.toISOString() : '',
-			allDay
+			allDay,
+			recurrence: repeat,
+			usesCar
 		};
 		try {
 			if (editing) {
@@ -254,6 +285,34 @@
 		{#if endDayLabel}
 			<p class="hint">Runs until {endDayLabel}.</p>
 		{/if}
+
+		<label class="toggle">
+			<input bind:checked={usesCar} type="checkbox" role="switch" />
+			<span class="car"><Car size={18} strokeWidth={2} aria-hidden="true" />Needs the car</span>
+		</label>
+		{#if usesCar}
+			<p class="hint">
+				Books the car{allDay ? '' : ' from start to end'}{repeat ? ', every repeat' : ''}. Nobody
+				else can book it then.
+			</p>
+		{/if}
+
+		<fieldset class="cals">
+			<legend>Repeats</legend>
+			<div class="calrow">
+				{#each REPEATS as r (r.value)}
+					<label class="rep">
+						<input type="radio" name="repeat" value={r.value} bind:group={repeat} />
+						<span>{r.label}</span>
+					</label>
+				{/each}
+			</div>
+			{#if repeatHint}
+				<p class="hint">
+					{repeatHint}{editing && repeat ? ' Saving updates every repeat.' : ''}
+				</p>
+			{/if}
+		</fieldset>
 
 		<fieldset class="cals">
 			<legend>Calendar</legend>
@@ -431,7 +490,8 @@
 
 	input:focus-visible,
 	button:focus-visible,
-	.cal:has(input:focus-visible) {
+	.cal:has(input:focus-visible),
+	.rep:has(input:focus-visible) {
 		outline: 2px solid #22252a;
 		outline-offset: 2px;
 	}
@@ -486,6 +546,12 @@
 		transform: translateX(18px);
 	}
 
+	.toggle .car {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+
 	.cals {
 		border: none;
 		padding: 0;
@@ -518,10 +584,32 @@
 		transition: background-color 120ms ease-out;
 	}
 
-	.cal input {
+	/* Repeat options use the same pills minus the colour square. */
+	.rep {
+		display: inline-flex;
+		align-items: center;
+		height: 44px;
+		padding: 0 14px;
+		border: 1px solid #c9ccd2;
+		border-radius: 999px;
+		background: #ffffff;
+		font-size: 15px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: background-color 120ms ease-out;
+	}
+
+	.cal input,
+	.rep input {
 		position: absolute;
 		opacity: 0;
 		pointer-events: none;
+	}
+
+	.rep:has(input:checked) {
+		border: 2px solid #22252a;
+		padding: 0 13px;
+		background: #f6f2e9;
 	}
 
 	.cal .sw {
@@ -569,7 +657,8 @@
 		background: #fbeeec;
 	}
 
-	.danger.armed {
+	.danger.armed,
+	.danger.armed:hover:not(:disabled) {
 		background: #a03427;
 		border-color: #a03427;
 		color: #ffffff;

@@ -3,7 +3,7 @@
 // they `require()` this file instead of closing over top-level functions.
 
 /** Fields whose change is worth telling the family about. */
-const TRACKED = ['title', 'startsAt', 'endsAt', 'allDay', 'calendar', 'description', 'location'];
+const TRACKED = ['title', 'startsAt', 'endsAt', 'allDay', 'calendar', 'description', 'location', 'recurrence', 'usesCar'];
 
 function actorOf(auth) {
 	// Superusers (admin UI) aren't family members and can't be a users relation.

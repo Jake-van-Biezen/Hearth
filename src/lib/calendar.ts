@@ -20,6 +20,10 @@ export type CalendarEvent = RecordModel & {
 	startsAt: string;
 	endsAt: string;
 	allDay: boolean;
+	/** "" | "weekly" | "monthly". Series-only: one event, many occurrences. */
+	recurrence: string;
+	/** Books the family car for the event's duration; overlaps are rejected server-side. */
+	usesCar: boolean;
 	createdBy: string;
 };
 
@@ -127,6 +131,83 @@ export function sortForDay(a: CalendarEvent, b: CalendarEvent): number {
 	return (parseDate(a.startsAt)?.getTime() ?? 0) - (parseDate(b.startsAt)?.getTime() ?? 0);
 }
 
+// ------------------------------------------------------------- repetition --
+
+/**
+ * The nextinstant of a recurring series at/after `from`, or null once past
+ * the cap (recurring series have no end date; stop looking after two years).
+ * Weekly keeps the weekday, monthly the day of the month (months without
+ * that date, like Feb 31, are skipped).
+ */
+export function seriesNext(ev: CalendarEvent, from: Date): Date | null {
+	const start = parseDate(ev.startsAt);
+	if (!start || !ev.recurrence) return null;
+	const cap = new Date(from.getFullYear() + 2, from.getMonth(), from.getDate(), 23, 59, 59, 999);
+	if (ev.recurrence === 'weekly') {
+		const steps = Math.max(0, Math.ceil(daysBetween(startOfDay(start), from) / 7));
+		let occ = addDays(start, steps * 7);
+		if (daysBetween(startOfDay(from), startOfDay(occ)) === 0 && occ.getTime() < from.getTime())
+			occ = addDays(occ, 7);
+		return occ.getTime() <= cap.getTime() ? occ : null;
+	}
+	if (ev.recurrence === 'monthly') {
+		for (let k = 0; k < 36; k++) {
+			// Skim past months already behind `from` without walking all of them.
+			const baseMonths =
+				k === 0
+					? (from.getFullYear() - start.getFullYear()) * 12 + (from.getMonth() - start.getMonth())
+					: 1;
+			const occ = new Date(
+				start.getFullYear(),
+				start.getMonth() + Math.max(0, baseMonths) + k,
+				start.getDate(),
+				start.getHours(),
+				start.getMinutes(),
+				start.getSeconds()
+			);
+			// Rolled over (Feb 31 → Mar 2): that month has no such date; skip it.
+			if (occ.getDate() !== start.getDate()) continue;
+			if (occ.getTime() < from.getTime()) continue;
+			return occ.getTime() <= cap.getTime() ? occ : null;
+		}
+	}
+	return null;
+}
+
+const OCCURRENCE_LIMIT = 260; // well past 2 years of either rule
+
+/**
+ * Expand recurring series into concrete occurrences inside
+ * [rangeStart, rangeEnd). Non-recurring events pass through untouched;
+ * an occurrence is a shallow copy of the base with shifted timestamps.
+ */
+export function expandRecurring(
+	events: CalendarEvent[],
+	rangeStart: Date,
+	rangeEnd: Date
+): CalendarEvent[] {
+	return events.flatMap((ev) => {
+		if (!ev.recurrence) return [ev];
+		const base = parseDate(ev.startsAt);
+		if (!base) return [];
+		const end = parseDate(ev.endsAt);
+		const delta = end ? end.getTime() - base.getTime() : 0;
+		const out: CalendarEvent[] = [];
+		let from = rangeStart;
+		for (let n = 0; n < OCCURRENCE_LIMIT; n++) {
+			const occ = seriesNext({ ...ev, startsAt: ev.startsAt }, from);
+			if (!occ || occ.getTime() >= rangeEnd.getTime()) break;
+			out.push({
+				...ev,
+				startsAt: occ.toISOString(),
+				endsAt: delta ? new Date(occ.getTime() + delta).toISOString() : ''
+			});
+			from = addDays(startOfDay(occ), 1);
+		}
+		return out;
+	});
+}
+
 export async function loadFamily(userId: string): Promise<Family | null> {
 	const list = await pb.collection('families').getList<Family>(1, 1, {
 		filter: pb.filter('members.id ?= {:uid}', { uid: userId }),
@@ -154,18 +235,28 @@ export function formatMonthRange(first: Date): string {
 	return new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(first);
 }
 
-export function loadWeekEvents(familyId: string, weekStart: Date): Promise<CalendarEvent[]> {
+/**
+ * All events touching [weekStart, +7d), with recurring series expanded to
+ * their occurrences in that window (the base of an ongoing series may sit
+ * below the window; expansion is client-side).
+ */
+export async function loadWeekEvents(
+	familyId: string,
+	weekStart: Date
+): Promise<CalendarEvent[]> {
 	const end = addDays(weekStart, 7);
-	return pb.collection('events').getFullList<CalendarEvent>({
+	const evs = await pb.collection('events').getFullList<CalendarEvent>({
 		filter: pb.filter(
-			'calendar.family = {:fid} && startsAt < {:end} && (startsAt >= {:start} || endsAt > {:start})',
+			'calendar.family = {:fid} && startsAt < {:end} && (startsAt >= {:start} || endsAt > {:start} || (recurrence != "" && startsAt < {:start}))',
 			{ fid: familyId, start: weekStart, end }
 		),
 		sort: 'startsAt',
 		requestKey: 'hearth-week'
 	});
+	return expandRecurring(evs, weekStart, end);
 }
 
+/** See loadWeekEvents; `end` is exclusive. */
 export function loadRangeEvents(
 	familyId: string,
 	start: Date,
@@ -174,22 +265,46 @@ export function loadRangeEvents(
 ): Promise<CalendarEvent[]> {
 	return pb.collection('events').getFullList<CalendarEvent>({
 		filter: pb.filter(
-			'calendar.family = {:fid} && startsAt < {:end} && (startsAt >= {:start} || endsAt > {:start})',
+			'calendar.family = {:fid} && startsAt < {:end} && (startsAt >= {:start} || endsAt > {:start} || (recurrence != "" && startsAt < {:start}))',
 			{ fid: familyId, start, end }
 		),
 		sort: 'startsAt',
 		requestKey
-	});
+	}).then((evs) => expandRecurring(evs, start, end));
 }
 
+/**
+ * The next timed appointment or recurring occurrence from `now` on. The
+ * server can't expand recurrence, so recurring bases are fetched and their
+ * next occurrence computed here; the earliest wins.
+ */
 export async function loadNextUp(familyId: string, now: Date): Promise<CalendarEvent | null> {
-	const list = await pb.collection('events').getList<CalendarEvent>(1, 1, {
-		filter: pb.filter('calendar.family = {:fid} && allDay = false && startsAt >= {:now}', {
-			fid: familyId,
-			now
+	const base = 'calendar.family = {:fid} && allDay = false';
+	const [plain, series] = await Promise.all([
+		pb.collection('events').getList<CalendarEvent>(1, 1, {
+			filter: pb.filter(`${base} && startsAt >= {:now}`, { fid: familyId, now }),
+			sort: 'startsAt',
+			requestKey: 'hearth-next-plain'
 		}),
-		sort: 'startsAt',
-		requestKey: 'hearth-next'
-	});
-	return list.items[0] ?? null;
+		pb.collection('events').getFullList<CalendarEvent>({
+			filter: pb.filter(`${base} && recurrence != "" && startsAt < {:now}`, {
+				fid: familyId,
+				now
+			}),
+			sort: '-startsAt',
+			requestKey: 'hearth-next-series'
+		})
+	]);
+	let best: CalendarEvent | null = plain.items[0] ?? null;
+	let bestAt = best ? parseDate(best.startsAt)?.getTime() ?? Infinity : Infinity;
+	for (const ev of series) {
+		const occ = seriesNext(ev, now);
+		if (!occ) continue;
+		const at = occ.getTime();
+		if (at < bestAt) {
+			best = { ...ev, startsAt: occ.toISOString() };
+			bestAt = at;
+		}
+	}
+	return best;
 }

@@ -2,7 +2,7 @@
 	import { onDestroy, onMount, tick } from 'svelte';
 	import { goto, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
-	import { Bell, ChevronLeft, ChevronRight, Lock, Plus } from '@lucide/svelte';
+	import { Bell, ChevronLeft, ChevronRight, Car, Lock, Plus, Repeat } from '@lucide/svelte';
 	import { pb } from '$lib/pocketbase';
 	import EventSheet from '$lib/components/calendar/EventSheet.svelte';
 	import UpdatesSheet from '$lib/components/calendar/UpdatesSheet.svelte';
@@ -589,9 +589,10 @@
 										title={`${ev.title}${cal ? ` · ${cal.name}` : ''}`}
 									>
 										<button class="hit" onclick={() => sheet?.edit(ev)}>
+											{#if ev.usesCar}<Car size={11} strokeWidth={2.5} class="rec" aria-hidden="true" />{/if}{#if ev.recurrence}<Repeat size={11} strokeWidth={2.5} class="rec" aria-hidden="true" />{/if}
 											{#if time}<span class="t">{time}</span>{/if}
 											<span class="n">{ev.title}</span>
-											<span class="sr">, {cal ? `${cal.name}, ` : ''}edit</span>
+											<span class="sr">, {ev.usesCar ? 'needs the car, ' : ''}{cal ? `${cal.name}, ` : ''}edit</span>
 										</button>
 									</li>
 								{/each}
@@ -690,9 +691,10 @@
 											title={`${ev.title}${cal ? ` · ${cal.name}` : ''}`}
 										>
 											<button class="hit" onclick={() => sheet?.edit(ev)}>
+												{#if ev.usesCar}<Car size={11} strokeWidth={2.5} class="rec" aria-hidden="true" />{/if}{#if ev.recurrence}<Repeat size={11} strokeWidth={2.5} class="rec" aria-hidden="true" />{/if}
 												{#if time}<span class="t">{time}</span>{/if}
 												<span class="n">{ev.title}</span>
-												<span class="sr">, {cal ? `${cal.name}, ` : ''}edit</span>
+												<span class="sr">, {ev.usesCar ? 'needs the car, ' : ''}{cal ? `${cal.name}, ` : ''}edit</span>
 											</button>
 										</li>
 									{/each}
@@ -1234,6 +1236,15 @@
 		font-weight: 500;
 		margin-right: 5px;
 		opacity: 0.92;
+	}
+
+	/* Car / repeats: small glyphs ahead of the time. */
+	.chip :global(.rec) {
+		width: 11px;
+		height: 11px;
+		margin-right: 4px;
+		opacity: 0.85;
+		vertical-align: -1px;
 	}
 
 	/* Vertical inset as transparent border: overflow clips at the padding
