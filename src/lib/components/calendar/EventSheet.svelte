@@ -64,6 +64,11 @@
 	let usesCar = $state(false);
 	/** Lead time in minutes (null = no reminder) and the saved row, for this person only. */
 	let reminder = $state<number | null>(null);
+	/** Select value; a string so "None" can't leak into the number binding. */
+	const reminderChoice = $derived(reminder === null ? '' : String(reminder));
+	function pickReminder(value: string) {
+		reminder = value === '' ? null : Number(value);
+	}
 	let savedReminder = $state<Reminder | null>(null);
 	let busy = $state(false);
 	let confirmDelete = $state(false);
@@ -225,7 +230,8 @@
 		}
 		try {
 			await setReminder(uid, eventId, reminder, savedReminder);
-		} catch {
+		} catch (err) {
+			console.error('reminder save failed', err);
 			toast.error("Saved the event, but the reminder didn't stick. Try again when you're online.");
 		}
 	}
@@ -411,9 +417,9 @@
 		{#if canRemind({ recurrence: repeat, allDay })}
 			<label class="field">
 				<span>Remind me</span>
-				<select bind:value={reminder}>
+				<select value={reminderChoice} onchange={(e) => pickReminder(e.currentTarget.value)}>
 					{#each REMINDER_OPTIONS as opt (opt.label)}
-						<option value={opt.value}>{opt.label}</option>
+						<option value={opt.value === null ? '' : String(opt.value)}>{opt.label}</option>
 					{/each}
 				</select>
 			</label>
